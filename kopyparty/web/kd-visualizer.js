@@ -21,6 +21,7 @@
     var SVG_PREV = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><polygon points="18,5 18,19 8,12"/></svg>';
     var SVG_NEXT = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><polygon points="6,5 6,19 16,12"/></svg>';
     var SVG_RAND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M3 7l4 0 8 10 6 0 M3 17l4 0 4-5 M19 7l2 0 M19 17l2 0 M21 5l0 4 M21 15l0 4"/></svg>';
+    var SVG_AUTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M21 12a9 9 0 1 1-3.5-7.1 M21 4v5h-5"/></svg>';
     var SVG_FS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5"/></svg>';
     var SVG_CLOSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><polygon points="6,9 18,9 12,17"/></svg>';
 
@@ -36,6 +37,16 @@
     var presetKeys = null;
     var presetIdx = 0;
     var connectedSrc = null;
+
+    // auto-cycle: randomly swap preset on a fixed interval (and on
+    // track change). Persisted to localStorage so the user's choice
+    // survives reloads.
+    var AUTO_INTERVAL_MS = 30 * 1000;
+    var autoCycle = false;
+    var autoTimer = null;
+    try {
+        autoCycle = window.localStorage && window.localStorage.getItem('kd_viz_auto') === '1';
+    } catch (e) {}
 
     function rootSlash() {
         return (window.SR || '') + '/.kpr/w/deps/';
@@ -71,6 +82,7 @@
             '<div id="kd-viz-ctrl">' +
                 '<a href="#" id="kd-viz-prev" title="previous preset (left arrow)">' + SVG_PREV + '</a>' +
                 '<a href="#" id="kd-viz-rand" title="random preset (R)">' + SVG_RAND + '</a>' +
+                '<a href="#" id="kd-viz-auto" title="auto-cycle every 30s + on track change (A)">' + SVG_AUTO + '</a>' +
                 '<a href="#" id="kd-viz-next" title="next preset (right arrow)">' + SVG_NEXT + '</a>' +
                 '<a href="#" id="kd-viz-fs" title="fullscreen (F)">' + SVG_FS + '</a>' +
                 '<a href="#" id="kd-viz-close" title="close (Escape)">' + SVG_CLOSE + '</a>' +
@@ -99,8 +111,12 @@
         on('kd-viz-prev', function () { stepPreset(-1); });
         on('kd-viz-next', function () { stepPreset(1); });
         on('kd-viz-rand', function () { randomPreset(); });
+        on('kd-viz-auto', function () { setAutoCycle(!autoCycle); });
         on('kd-viz-fs', toggleFullscreen);
         on('kd-viz-close', closePanel);
+
+        // reflect persisted auto-cycle state on the freshly-built button
+        updateAutoButtonState();
     }
 
     function ensureViz() {
@@ -157,6 +173,7 @@
         if (!presetKeys || !presetKeys.length) return;
         presetIdx = (presetIdx + delta + presetKeys.length) % presetKeys.length;
         applyPreset();
+        scheduleAutoCycle(true); // user nudged manually — restart the countdown
     }
 
     function randomPreset() {
@@ -168,6 +185,50 @@
             } while (presetIdx === prev);
         }
         applyPreset();
+        scheduleAutoCycle(true);
+    }
+
+    // ----- auto-cycle -----
+
+    function scheduleAutoCycle(restart) {
+        // tear down any pending timer; only start a fresh one if
+        // auto is on AND the panel is currently open AND we're
+        // either booting or the caller asked for a reset.
+        if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+        if (!autoCycle) return;
+        if (!isOpen()) return;
+        if (!restart && autoTimer) return;
+        autoTimer = setInterval(function () {
+            if (!isOpen()) return;
+            // randomPreset() recursively reschedules, so call the
+            // applier directly to avoid stacking timers.
+            if (presetKeys && presetKeys.length > 1) {
+                var prev = presetIdx;
+                do {
+                    presetIdx = Math.floor(Math.random() * presetKeys.length);
+                } while (presetIdx === prev);
+                applyPreset(2.5);
+            } else if (presetKeys && presetKeys.length === 1) {
+                applyPreset(2.5);
+            }
+        }, AUTO_INTERVAL_MS);
+    }
+
+    function setAutoCycle(on) {
+        autoCycle = !!on;
+        try {
+            if (window.localStorage)
+                window.localStorage.setItem('kd_viz_auto', autoCycle ? '1' : '0');
+        } catch (e) {}
+        scheduleAutoCycle(true);
+        updateAutoButtonState();
+    }
+
+    function updateAutoButtonState() {
+        var btn = document.getElementById('kd-viz-auto');
+        if (!btn) return;
+        if (autoCycle) btn.classList.add('on');
+        else btn.classList.remove('on');
     }
 
     // route audio source → butterchurn analyser
@@ -237,6 +298,7 @@
             setTimeout(function () { resizeCanvas(); }, 380);
             if (rafId === null) renderLoop();
             updateToggleState();
+            scheduleAutoCycle(true);
         }).catch(function (e) {
             console.warn('kdVisualizer load failed:', e && e.message || e);
         });
@@ -245,6 +307,9 @@
     function closePanel() {
         if (panel) panel.classList.remove('kd-viz-open');
         updateToggleState();
+        // stop the cycle while the panel is hidden — no point spinning
+        // a 30 s timer just to advance an off-screen visualizer.
+        if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
     }
 
     function togglePanel() {
@@ -316,6 +381,7 @@
         else if (e.key === 'ArrowLeft') stepPreset(-1);
         else if (e.key === 'ArrowRight') stepPreset(1);
         else if (e.key === 'r' || e.key === 'R') randomPreset();
+        else if (e.key === 'a' || e.key === 'A') setAutoCycle(!autoCycle);
         else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
     });
 
@@ -323,12 +389,17 @@
         toggle: togglePanel,
         open: openPanel,
         close: closePanel,
+        setAutoCycle: setAutoCycle,
         // kd-chiptune.js calls this when the audio source changes
         // (track switch on chiptune, MediaElementSource freshly wrapped
-        // for browser-native audio).
+        // for browser-native audio). When auto-cycle is on we also
+        // randomise the preset for a "fresh look per track" feel.
         onAudioChanged: function () {
             connectedSrc = null;
             if (viz && isOpen()) connectAudio(true);
+            if (autoCycle && viz && isOpen()) {
+                randomPreset();
+            }
         }
     };
 

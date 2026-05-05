@@ -1092,6 +1092,24 @@ html#ht_spl body {
     transform: scale(0.96);
 }
 
+#ht_brw #kd-viz-ctrl a.on {
+    color: #071013;
+    background: var(--a);
+    border-color: var(--a);
+    box-shadow:
+        0 0 12px rgba(0, 255, 150, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+#ht_brw #kd-viz-ctrl a.on:hover {
+    color: #071013;
+    background: var(--a-hil);
+    border-color: var(--a-hil);
+    box-shadow:
+        0 0 16px rgba(0, 255, 150, 0.7),
+        inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
 @media (max-width: 760px) {
     #ht_brw #kd-viz-panel {
         margin: 0 0.6em 0;
