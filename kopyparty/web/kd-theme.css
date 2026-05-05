@@ -1663,45 +1663,65 @@ html#ht_rup #tw th {
         margin-right: 0.6em !important;
     }
 
-    /* compact widget controls so progress + volume both fit a narrow row.
-       Layout (left → right inside #widgeti):
-         pctl  (3 × 32px buttons + gaps  ≈ 102px)
-         barbuf/barpos (flexible — calc'd to fill the gap)
-         pvol  (96px, anchored right with 8px gutter) */
-    #ht_brw #widgeti {
-        height: 56px !important;
+    /* Two-row widget layout on mobile, with symmetric 8px gutters:
+         row 1 (top, 32px): pctl on left, pvol on right
+         row 2 (bottom, 28px): full-width progress bar
+       Total widget height = 8 (top) + 32 (pctl) + 8 (gap) + 28 (bar)
+                           + 8 (bottom) = 84px → 88. The selector matches
+       the base #ht_brw #widget.open #widgeti rule's specificity (three
+       IDs + one class) so this height override actually wins. */
+    #ht_brw #widget.open #widgeti {
+        height: 88px !important;
     }
+
+    /* row 1 left — transport controls (3 × 32 + 2 × 4 = 104px wide) */
     #ht_brw #pctl {
         top: 8px !important;
         left: 8px !important;
+        bottom: auto !important;
     }
     #ht_brw #pctl a {
         width: 32px !important;
         height: 32px !important;
-        font-size: 15px !important;
-        margin: 0 3px 0 0 !important;
-        border-radius: 5px !important;
+        font-size: 14px !important;
+        margin: 0 4px 0 0 !important;
+        border-radius: 6px !important;
     }
-    /* progress bar — between pctl and pvol */
-    #ht_brw #barbuf,
-    #ht_brw #barpos {
-        height: 22px !important;
-        left: 110px !important;
-        right: 130px !important;
-        width: calc(100% - 240px) !important;
-        border-radius: 11px !important;
+    #ht_brw #pctl a:last-child {
+        margin-right: 0 !important;
     }
-    /* volume — anchored right.
-       Width 110px is the smallest at which the canvas-internal text
-       formula x = w*vol - tw - 8 (with optional +tw+16 shift) keeps
-       'volume 50' inside the visible bounds at every vol value. */
+
+    /* row 1 right — volume slider, fills the remaining width.
+       pctl ends at left:8+104 = 112; with an 8px gap, pvol starts at
+       left:120. Canvas elements ignore `width: auto` (it falls back to
+       the intrinsic HTML width attribute), so width must be set
+       explicitly via calc. */
     #ht_brw #pvol {
         display: block !important;
-        width: 110px !important;
-        max-width: 110px !important;
-        height: 22px !important;
-        right: 10px !important;
-        left: auto !important;
-        border-radius: 11px !important;
+        position: absolute !important;
+        top: 12px !important;
+        right: 8px !important;
+        left: 120px !important;
+        bottom: auto !important;
+        width: calc(100% - 128px) !important;
+        max-width: none !important;
+        height: 24px !important;
+        transform: none !important;
+        border-radius: 12px !important;
+    }
+
+    /* row 2 — full-width progress bar.
+       Same canvas-width caveat as #pvol — explicit calc, not auto. */
+    #ht_brw #barbuf,
+    #ht_brw #barpos {
+        position: absolute !important;
+        top: auto !important;
+        bottom: 8px !important;
+        left: 8px !important;
+        right: 8px !important;
+        width: calc(100% - 16px) !important;
+        height: 28px !important;
+        transform: none !important;
+        border-radius: 14px !important;
     }
 }

@@ -206,6 +206,9 @@
                 self._fire('playing');
                 self._fire('play');
                 self._startTimer();
+                // kick off an offline waveform render so the progress bar
+                // gets the same translucent waveform overlay as mp3 files
+                generateChiptuneWaveform(url, buffer, self._duration);
             });
         }
     });
@@ -459,6 +462,52 @@
         ChiptuneAudio: ChiptuneAudio
     };
 
+    // ----- Crisp symmetric SVG transport icons -----
+    //
+    // Unicode ⏮/⏭ are not consistently mirror-symmetric across system
+    // fonts (the embedded triangles end up different widths), and the
+    // glyph hinting at small sizes makes the buttons look misaligned.
+    // Replace the text content with inline SVG so the prev/next icons
+    // are exact mirrors and play/pause stay solid at any zoom level.
+    var SVG_PREV = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><rect x="6" y="6" width="2" height="12"/><polygon points="20,6 20,18 10,12"/></svg>';
+    var SVG_NEXT = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><rect x="16" y="6" width="2" height="12"/><polygon points="4,6 4,18 14,12"/></svg>';
+    var SVG_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><polygon points="6,5 6,19 20,12"/></svg>';
+    var SVG_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><rect x="7" y="5" width="3" height="14"/><rect x="14" y="5" width="3" height="14"/></svg>';
+    var iconsInstalled = false;
+
+    function installSvgIcons() {
+        if (iconsInstalled) return true;
+        var bprev = document.getElementById('bprev');
+        var bplay = document.getElementById('bplay');
+        var bnext = document.getElementById('bnext');
+        if (!bprev || !bplay || !bnext) return false;
+
+        bprev.innerHTML = SVG_PREV;
+        bnext.innerHTML = SVG_NEXT;
+        // bplay starts paused → play icon visible.
+        bplay.innerHTML = SVG_PLAY;
+
+        // Patch widget.paused so it swaps SVGs, not the original ▶/⏸ chars.
+        if (window.widget && typeof window.widget.paused === 'function' && !window.widget._kdPaused) {
+            window.widget._kdPaused = true;
+            var was = true;
+            window.widget.paused = function (paused) {
+                if (was === paused) return;
+                was = paused;
+                var b = document.getElementById('bplay');
+                if (b) b.innerHTML = paused ? SVG_PLAY : SVG_PAUSE;
+            };
+        }
+        iconsInstalled = true;
+        return true;
+    }
+
+    function tryInstallSvgIcons(retries) {
+        if (installSvgIcons()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryInstallSvgIcons(retries + 1); }, 100);
+    }
+
     // ===== Player UX patches (independent of chiptune routing) =====
     //
     // These run after browser.js has built `pbar` (the progress-bar
@@ -508,7 +557,11 @@
                 pctx.fillStyle = '#dfc'; pctx.fillRect((x - cw / 2), stripY, cw, stripH);
 
                 // Re-draw the time labels at y = h*2/3 (same as volume).
-                pctx.font = '.9em sans-serif';
+                // Match vbar.draw's font size (.7em) so both labels are the
+                // same visual height and the baselines line up. The
+                // upstream pbar uses .9em which made time labels noticeably
+                // taller than 'volume NN'.
+                pctx.font = '.7em sans-serif';
                 pctx.fillStyle = '#fff';
                 pctx.strokeStyle = 'rgba(24,56,0,0.5)';
                 pctx.lineWidth = 2.5;
@@ -645,15 +698,128 @@
         setTimeout(function () { tryInstallWaveformHook(retries + 1); }, 100);
     }
 
+    // ----- Chiptune waveform (libopenmpt offline render) -----
+    //
+    // For tracker formats we already have the file as ArrayBuffer (loaded
+    // by chiptune2 via XHR). Rather than re-fetch + decode, instantiate a
+    // SECOND libopenmpt module from the same buffer — separate from the
+    // one currently playing — and read it through end-to-end at a low
+    // sample rate. Peak-sample the rendered audio per output column,
+    // render to a 800x80 canvas, hand the data URL to pbar.loadwaves.
+    // Cached per source URL so re-clicks don't re-render.
+    var chiptuneWaveCache = Object.create(null);
+
+    function generateChiptuneWaveform(url, buffer, duration) {
+        if (!url || !buffer || !isFinite(duration) || duration <= 0) return;
+        if (chiptuneWaveCache[url] === 'pending' || chiptuneWaveCache[url] === 'failed') return;
+        if (chiptuneWaveCache[url]) {
+            try { window.pbar && window.pbar.loadwaves && window.pbar.loadwaves(chiptuneWaveCache[url]); }
+            catch (e) {}
+            return;
+        }
+        if (!window.libopenmpt
+            || typeof libopenmpt._malloc !== 'function'
+            || typeof libopenmpt._openmpt_module_create_from_memory !== 'function'
+            || typeof libopenmpt._openmpt_module_read_float_stereo !== 'function'
+            || typeof libopenmpt._openmpt_module_destroy !== 'function'
+            || !libopenmpt.HEAPU8 || !libopenmpt.HEAPF32) return;
+        if (!window.pbar || !window.pbar.loadwaves) return;
+
+        chiptuneWaveCache[url] = 'pending';
+
+        // Defer a tick so we don't hold up the playback path; the actual
+        // render is fast (low sample rate, <1s per minute of music).
+        setTimeout(function () {
+            var ptr = 0, modPtr = 0, leftPtr = 0, rightPtr = 0;
+            try {
+                var byteArr = new Uint8Array(buffer);
+                var fileLen = byteArr.byteLength;
+                ptr = libopenmpt._malloc(fileLen);
+                libopenmpt.HEAPU8.set(byteArr, ptr);
+                modPtr = libopenmpt._openmpt_module_create_from_memory(ptr, fileLen, 0, 0, 0);
+                if (!modPtr) throw new Error('module_create_from_memory returned 0');
+                if (typeof libopenmpt._openmpt_module_set_repeat_count === 'function') {
+                    libopenmpt._openmpt_module_set_repeat_count(modPtr, 0);
+                }
+
+                var SR = 4000;            // 4 kHz — fine for waveform
+                var W = 800, H = 80;
+                var totalSamples = Math.floor(duration * SR);
+                var chunk = 4000;         // 1 sec per chunk
+                leftPtr = libopenmpt._malloc(4 * chunk);
+                rightPtr = libopenmpt._malloc(4 * chunk);
+
+                var samplesPerPeak = Math.max(1, Math.floor(totalSamples / W));
+                var peaks = [];
+                var curMin = 0, curMax = 0, accum = 0;
+                var rendered = 0;
+                var safety = 0;
+
+                while (rendered < totalSamples && peaks.length < W && safety++ < 4000) {
+                    var want = Math.min(chunk, totalSamples - rendered);
+                    var got = libopenmpt._openmpt_module_read_float_stereo(modPtr, SR, want, leftPtr, rightPtr);
+                    if (got <= 0) break;
+                    var l = libopenmpt.HEAPF32.subarray(leftPtr / 4, leftPtr / 4 + got);
+                    var r = libopenmpt.HEAPF32.subarray(rightPtr / 4, rightPtr / 4 + got);
+                    for (var i = 0; i < got; i++) {
+                        var v = (l[i] + r[i]) * 0.5;
+                        if (v > curMax) curMax = v;
+                        if (v < curMin) curMin = v;
+                        accum++;
+                        if (accum >= samplesPerPeak) {
+                            peaks.push(curMin, curMax);
+                            curMin = 0; curMax = 0; accum = 0;
+                            if (peaks.length / 2 >= W) break;
+                        }
+                    }
+                    rendered += got;
+                }
+                if (accum > 0 && peaks.length / 2 < W) peaks.push(curMin, curMax);
+
+                var c = document.createElement('canvas');
+                c.width = W; c.height = H;
+                var cx = c.getContext('2d');
+                cx.clearRect(0, 0, W, H);
+                cx.strokeStyle = 'rgba(255,255,255,0.85)';
+                cx.lineWidth = 1;
+                cx.beginPath();
+                var n = peaks.length / 2;
+                for (var p = 0; p < n; p++) {
+                    var lo = peaks[p * 2];
+                    var hi = peaks[p * 2 + 1];
+                    var y1 = Math.round(H / 2 - hi * (H / 2 - 1));
+                    var y2 = Math.round(H / 2 - lo * (H / 2 - 1));
+                    cx.moveTo(p + 0.5, y1);
+                    cx.lineTo(p + 0.5, y2 + 1);
+                }
+                cx.stroke();
+
+                var dataUrl = c.toDataURL('image/png');
+                chiptuneWaveCache[url] = dataUrl;
+                try { window.pbar.loadwaves(dataUrl); } catch (e) {}
+            } catch (e) {
+                console.warn('kd-chiptune wave render failed:', e && e.message || e);
+                chiptuneWaveCache[url] = 'failed';
+            } finally {
+                try { if (modPtr) libopenmpt._openmpt_module_destroy(modPtr); } catch (e) {}
+                try { if (leftPtr) libopenmpt._free(leftPtr); } catch (e) {}
+                try { if (rightPtr) libopenmpt._free(rightPtr); } catch (e) {}
+                try { if (ptr) libopenmpt._free(ptr); } catch (e) {}
+            }
+        }, 0);
+    }
+
     // run after install pass — the existing tryInstall above wraps
     // window.play first; we wrap it again to add the waveform side-effect.
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             tryPatchDrawpos(0);
             tryInstallWaveformHook(0);
+            tryInstallSvgIcons(0);
         });
     } else {
         tryPatchDrawpos(0);
         tryInstallWaveformHook(0);
+        tryInstallSvgIcons(0);
     }
 })();
