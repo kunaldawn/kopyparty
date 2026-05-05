@@ -108,7 +108,15 @@
 
         this.networkState = 0;  // NETWORK_EMPTY
         this.readyState = 0;    // HAVE_NOTHING
-        this.buffered = { length: 0, start: function () { return 0; }, end: function () { return 0; } };
+        // buffered TimeRanges shim — once src is loaded we mutate this so
+        // pbar.drawbuf paints the entire bar as buffered (chiptunes are
+        // fully decoded into memory once libopenmpt parses them).
+        var self = this;
+        this.buffered = {
+            length: 0,
+            start: function (i) { return 0; },
+            end: function (i) { return self._duration || 0; }
+        };
     }
 
     ChiptuneAudio.prototype.addEventListener = function (name, cb) {
@@ -180,12 +188,23 @@
                 self._paused = false;
                 self.readyState = 4;   // HAVE_ENOUGH_DATA
                 self.networkState = 1; // NETWORK_IDLE
+                // pretend the entire track is buffered — the libopenmpt
+                // module is fully resident in memory after load, so this
+                // is accurate. lets pbar.drawbuf paint the green fill.
+                self.buffered.length = 1;
                 self.applyVolume();
                 self.applyLoop();
                 self._fire('loadeddata');
                 self._fire('loadedmetadata');
                 self._fire('canplay');
                 self._fire('durationchange');
+                // 'playing' is the event copyparty's mp.set_ev wires to
+                // mpui.progress_updater, which in turn calls
+                // widget.paused(false) → flips bplay icon to ⏸ and starts
+                // the bar redraw loop. Without this, the widget never
+                // animates while a chiptune is playing.
+                self._fire('playing');
+                self._fire('play');
                 self._startTimer();
             });
         }
@@ -256,6 +275,7 @@
         }
         this._paused = false;
         this._fire('play');
+        this._fire('playing');
         this._startTimer();
         return Promise.resolve();
     };
@@ -438,4 +458,202 @@
         getPlayer: getPlayer,
         ChiptuneAudio: ChiptuneAudio
     };
+
+    // ===== Player UX patches (independent of chiptune routing) =====
+    //
+    // These run after browser.js has built `pbar` (the progress-bar
+    // controller) and after window.play has been wrapped. They:
+    //   1. Override pbar.drawpos so the time labels (mm:ss / mm:ss) sit
+    //      at canvas y = h*2/3, matching the volume canvas's text y
+    //      and removing the visual misalignment between the two.
+    //   2. Fetch + decode each browser-native audio file with
+    //      AudioContext.decodeAudioData, render a peak-sample waveform
+    //      to a data URL, and feed it to pbar.loadwaves so the empty
+    //      bar gets the same waveform overlay as upstream copyparty
+    //      (which renders waveforms server-side via ffmpeg — disabled
+    //      in this fork by --no-thumb). Skipped for tracker formats
+    //      because we don't expose libopenmpt's PCM stream.
+
+    var drawposPatched = false;
+
+    function patchDrawpos() {
+        if (drawposPatched) return true;
+        if (!window.pbar || typeof window.pbar.drawpos !== 'function') return false;
+        if (typeof window.s2ms !== 'function') return false;
+
+        var orig = window.pbar.drawpos;
+        window.pbar.drawpos = function () {
+            orig.apply(this, arguments);
+            try {
+                if (!window.mp || !window.mp.au) return;
+                var pc = window.pbar.pos;
+                var bc = window.pbar.buf;
+                if (!pc || !pc.ctx || !bc) return;
+                var apos = window.mp.au.currentTime;
+                var adur = window.mp.au.duration;
+                if (!isFinite(adur) || !isFinite(apos) || apos < 0 || adur < apos) return;
+                if (!window.widget || !window.widget.is_open) return;
+
+                var pctx = pc.ctx;
+                // Erase bottom-third strip where copyparty drew text at y=h*0.94
+                var stripY = Math.floor(pc.h * 0.7);
+                var stripH = pc.h - stripY;
+                pctx.clearRect(0, stripY, pc.w, stripH);
+
+                // Re-draw the position cursor in the strip we just cleared
+                var sm = bc.w * 1.0 / adur;
+                var x = sm * apos;
+                var cw = 8;
+                pctx.fillStyle = '#573'; pctx.fillRect((x - cw / 2) - 1, stripY, cw + 2, stripH);
+                pctx.fillStyle = '#dfc'; pctx.fillRect((x - cw / 2), stripY, cw, stripH);
+
+                // Re-draw the time labels at y = h*2/3 (same as volume).
+                pctx.font = '.9em sans-serif';
+                pctx.fillStyle = '#fff';
+                pctx.strokeStyle = 'rgba(24,56,0,0.5)';
+                pctx.lineWidth = 2.5;
+                var t1 = window.s2ms(adur);
+                var t2 = window.s2ms(apos);
+                var m1 = pctx.measureText(t1);
+                var m1b = pctx.measureText(t1 + ':88');
+                var m2 = pctx.measureText(t2);
+                var yt = pc.h * 0.667;
+                var xt1 = pc.w - (m1.width + 12);
+                var xt2 = x < m1.width * 1.4 ? (x + 12)
+                    : (Math.min(pc.w - m1b.width, x - 12) - m2.width);
+                pctx.strokeText(t1, xt1 + 1, yt + 1);
+                pctx.strokeText(t2, xt2 + 1, yt + 1);
+                pctx.strokeText(t1, xt1, yt);
+                pctx.strokeText(t2, xt2, yt);
+                pctx.fillText(t1, xt1, yt);
+                pctx.fillText(t2, xt2, yt);
+            } catch (e) {
+                // never let the patch crash the original drawpos
+                console.warn('kd-chiptune drawpos patch error:', e);
+            }
+        };
+        drawposPatched = true;
+        return true;
+    }
+
+    function tryPatchDrawpos(retries) {
+        if (patchDrawpos()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryPatchDrawpos(retries + 1); }, 100);
+    }
+
+    // ----- client-side waveform -----
+    var waveCache = Object.create(null);
+    var waveAc = null;
+
+    function audioCtx() {
+        if (waveAc) return waveAc;
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        try { waveAc = new AC(); } catch (e) { return null; }
+        return waveAc;
+    }
+
+    function generateWaveform(url) {
+        if (!url || typeof url !== 'string') return;
+        if (waveCache[url] === 'pending' || waveCache[url] === 'failed') return;
+        if (waveCache[url]) {
+            try { window.pbar && window.pbar.loadwaves && window.pbar.loadwaves(waveCache[url]); }
+            catch (e) {}
+            return;
+        }
+        var ac = audioCtx();
+        if (!ac || !window.pbar || !window.pbar.loadwaves) return;
+
+        waveCache[url] = 'pending';
+
+        fetch(url, { credentials: 'same-origin', cache: 'force-cache' })
+            .then(function (r) { if (!r.ok) throw new Error('fetch status ' + r.status); return r.arrayBuffer(); })
+            .then(function (ab) {
+                // decodeAudioData consumes the buffer; clone for cache safety
+                return new Promise(function (resolve, reject) {
+                    ac.decodeAudioData(ab.slice(0), resolve, reject);
+                });
+            })
+            .then(function (buf) {
+                var W = 800, H = 80;
+                var ch0 = buf.getChannelData(0);
+                var ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
+                var samples = W;
+                var block = Math.max(1, Math.floor(ch0.length / samples));
+
+                var c = document.createElement('canvas');
+                c.width = W; c.height = H;
+                var cx = c.getContext('2d');
+                cx.clearRect(0, 0, W, H);
+                cx.strokeStyle = 'rgba(255,255,255,0.85)';
+                cx.lineWidth = 1;
+                cx.beginPath();
+                for (var i = 0; i < samples; i++) {
+                    var lo = 0, hi = 0;
+                    var end = Math.min(ch0.length, (i + 1) * block);
+                    for (var j = i * block; j < end; j++) {
+                        var v = ch1 ? (ch0[j] + ch1[j]) * 0.5 : ch0[j];
+                        if (v > hi) hi = v;
+                        if (v < lo) lo = v;
+                    }
+                    var y1 = Math.round(H / 2 - hi * (H / 2 - 1));
+                    var y2 = Math.round(H / 2 - lo * (H / 2 - 1));
+                    cx.moveTo(i + 0.5, y1);
+                    cx.lineTo(i + 0.5, y2 + 1);
+                }
+                cx.stroke();
+
+                var dataUrl = c.toDataURL('image/png');
+                waveCache[url] = dataUrl;
+                if (window.pbar && window.pbar.loadwaves) {
+                    try { window.pbar.loadwaves(dataUrl); } catch (e) {}
+                }
+            })
+            .catch(function (err) {
+                waveCache[url] = 'failed';
+                console.warn('kd-chiptune waveform decode failed for', url, err && err.message || err);
+            });
+    }
+
+    // hook waveform generation onto window.play. We wait for browser.js's
+    // play to finish (which sets mp.au.src) then sample mp.au.rsrc and
+    // dispatch the fetch+decode.
+    function installWaveformHook() {
+        if (typeof window.play !== 'function') return false;
+        if (window.play._kdWaveHooked) return true;
+        var prev = window.play;
+        window.play = function () {
+            var ret = prev.apply(this, arguments);
+            try {
+                if (window.mp && window.mp.au && !(window.mp.au instanceof ChiptuneAudio)) {
+                    var u = window.mp.au.rsrc || window.mp.au.src;
+                    // unbuffer query params from copyparty re-fetch dance can
+                    // strip — our cache is keyed on the full URL so it's fine
+                    if (u) generateWaveform(u);
+                }
+            } catch (e) {}
+            return ret;
+        };
+        window.play._kdWaveHooked = true;
+        return true;
+    }
+
+    function tryInstallWaveformHook(retries) {
+        if (installWaveformHook()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryInstallWaveformHook(retries + 1); }, 100);
+    }
+
+    // run after install pass — the existing tryInstall above wraps
+    // window.play first; we wrap it again to add the waveform side-effect.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            tryPatchDrawpos(0);
+            tryInstallWaveformHook(0);
+        });
+    } else {
+        tryPatchDrawpos(0);
+        tryInstallWaveformHook(0);
+    }
 })();

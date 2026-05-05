@@ -602,10 +602,13 @@ html#ht_spl body {
     text-shadow: 0 0 6px rgba(0, 255, 150, 0.3);
 }
 
-/* tree control buttons (in #treepar at top of sidebar) — uniform theme */
+/* tree control buttons (in #treepar at top of sidebar) — uniform theme.
+   Includes #detree (the 🍞... breadcrumb-mode toggle) which the upstream
+   browser.css makes much taller than its siblings; clamp it to match. */
 #ht_brw #treepar .btn,
 #ht_brw #treepar a.btn,
-#ht_brw #treeh .btn {
+#ht_brw #treeh .btn,
+#ht_brw #treeh #detree {
     color: var(--a) !important;
     background: rgba(0, 0, 0, 0.35) !important;
     border: 1px solid rgba(0, 255, 150, 0.3) !important;
@@ -615,6 +618,22 @@ html#ht_spl body {
     margin: 2px !important;
     padding: 0.15em 0.4em !important;
     font-size: 0.95em !important;
+    line-height: 1.4 !important;
+    display: inline-block !important;
+    vertical-align: middle !important;
+}
+
+/* the breadcrumb toggle naturally renders at ~93x41 due to its emoji
+   font; clamp width and height so the row of toolbar buttons looks
+   uniform with the +/-/🎯/📃 siblings (~22-33 wide × 25 high). */
+#ht_brw #treeh #detree {
+    height: 25px !important;
+    box-sizing: border-box !important;
+    padding: 1px 6px !important;
+    font-size: 0.85em !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    max-width: 60px !important;
 }
 
 #ht_brw #treepar .btn:hover,
@@ -649,9 +668,11 @@ html#ht_spl body {
     text-shadow: 0 0 8px rgba(0, 255, 150, 0.45) !important;
 }
 
-/* PREV / UP / NEXT navigation — moved by JS to sit between #ghead and grid */
+/* PREV / UP / NEXT navigation — moved by JS to sit between #ghead and grid.
+   Uniform 1em vertical gap above and below so header→ghead→wfp→grid all
+   space evenly (each block is separated by ~16px). */
 #ht_brw h2#wfp {
-    margin: 0.6em 0 0.6em !important;
+    margin: 1em 0 1em !important;
     padding: 0.4em 0.8em !important;
     font-family: var(--font-mono);
     font-size: 0.85em;
@@ -1336,6 +1357,10 @@ html#ht_rup #tw th {
     padding: 8px 12px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     line-height: 2.1em;
+    /* uniform 1em vertical gap below ghead, matching the gap above
+       (#wrap padding-top: 1.2em ≈ 1em from header). Combined with
+       wfp's 1em margin top this gives consistent breathing room. */
+    margin-bottom: 0 !important;
 }
 
 #ht_brw .ghead > span {
@@ -1399,14 +1424,25 @@ html#ht_rup #tw th {
     color: var(--a);
 }
 
-/* ZIP button injected at the end of the grid toolbar */
+/* ZIP button injected at the end of the grid toolbar.
+   Float:right doesn't fit on the toolbar row when the inline content
+   already fills it, so anchor it to the top-right corner of #ghead. */
+#ht_brw #ghead {
+    position: relative;
+    padding-right: 92px;
+}
+
 #ht_brw .ghead a.kd-zip-btn {
-    float: right;
+    float: none;
+    position: absolute;
+    top: 8px;
+    right: 10px;
     color: #071013;
     background: var(--a);
     border-color: var(--a);
     box-shadow: 0 0 10px rgba(0, 255, 150, 0.35);
     font-weight: 700;
+    z-index: 1;
 }
 
 #ht_brw .ghead a.kd-zip-btn:hover {
@@ -1627,7 +1663,11 @@ html#ht_rup #tw th {
         margin-right: 0.6em !important;
     }
 
-    /* compact widget controls so the progress bar gets more room */
+    /* compact widget controls so progress + volume both fit a narrow row.
+       Layout (left → right inside #widgeti):
+         pctl  (3 × 32px buttons + gaps  ≈ 102px)
+         barbuf/barpos (flexible — calc'd to fill the gap)
+         pvol  (96px, anchored right with 8px gutter) */
     #ht_brw #widgeti {
         height: 56px !important;
     }
@@ -1636,24 +1676,32 @@ html#ht_rup #tw th {
         left: 8px !important;
     }
     #ht_brw #pctl a {
-        width: 36px !important;
-        height: 36px !important;
-        font-size: 16px !important;
+        width: 32px !important;
+        height: 32px !important;
+        font-size: 15px !important;
         margin: 0 3px 0 0 !important;
+        border-radius: 5px !important;
     }
-    /* hide volume slider on mobile — most touch users use the device
-       hardware volume keys, and the volume canvas is too narrow to be
-       useful at small widths anyway */
-    #ht_brw #pvol {
-        display: none !important;
-    }
-    /* progress bar takes the rest of the row */
+    /* progress bar — between pctl and pvol */
     #ht_brw #barbuf,
     #ht_brw #barpos {
         height: 22px !important;
-        left: 130px !important;
-        right: 12px !important;
-        width: calc(100% - 142px) !important;
+        left: 110px !important;
+        right: 130px !important;
+        width: calc(100% - 240px) !important;
+        border-radius: 11px !important;
+    }
+    /* volume — anchored right.
+       Width 110px is the smallest at which the canvas-internal text
+       formula x = w*vol - tw - 8 (with optional +tw+16 shift) keeps
+       'volume 50' inside the visible bounds at every vol value. */
+    #ht_brw #pvol {
+        display: block !important;
+        width: 110px !important;
+        max-width: 110px !important;
+        height: 22px !important;
+        right: 10px !important;
+        left: auto !important;
         border-radius: 11px !important;
     }
 }
