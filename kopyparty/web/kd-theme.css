@@ -876,48 +876,55 @@ html#ht_spl body {
     display: none !important;
 }
 
-/* visualizer toggle — a clearly-labelled tab anchored to the top
-   center of the widget, sticking out above the widget chrome. Lives
-   in dead space (no overlap with the progress bar or volume canvas)
-   and reads obviously as a button. When the panel is open the tab
-   hides; the panel's own close button (▼) handles dismissing. */
+/* visualizer toggle — a tab anchored top-centre of the widget,
+   styled as a quiet extension of the widget's chrome (matches its
+   dark gradient + green outline) instead of a flashy primary button.
+   Sits directly on the widget's top edge so the bottom border of
+   the tab merges into the widget's top border — looks like one
+   continuous shape. When the panel is open the tab hides; the
+   panel's own close button (▼) handles dismissing. */
 #ht_brw #widget a#kd-viz-toggle {
     position: absolute;
-    top: -22px;
+    top: -21px;
     left: 50%;
     transform: translateX(-50%);
-    height: 24px;
-    padding: 0 14px;
+    height: 22px;
+    padding: 0 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 7px;
-    color: #071013;
-    background: linear-gradient(180deg, var(--a) 0%, var(--a-dark) 100%);
-    border: 1px solid var(--a);
-    border-bottom: none;
-    border-radius: 12px 12px 0 0;
+    color: var(--a);
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.96), rgba(3, 16, 24, 0.99));
+    border: 1px solid rgba(0, 255, 150, 0.28);
+    border-bottom: 1px solid rgba(7, 24, 35, 0.99);
+    border-radius: 8px 8px 0 0;
     text-decoration: none;
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.18em;
     line-height: 1;
+    text-shadow: 0 0 5px rgba(0, 255, 150, 0.35);
     box-shadow:
-        0 -3px 10px rgba(0, 0, 0, 0.5),
-        0 -1px 0 rgba(255, 255, 255, 0.2) inset,
-        0 0 18px rgba(0, 255, 150, 0.4);
-    transition: color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
+        0 -2px 8px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    transition: color 0.15s ease, background 0.15s ease,
+                border-color 0.15s ease, box-shadow 0.15s ease,
+                transform 0.15s ease;
     z-index: 50;
     white-space: nowrap;
+    margin-bottom: -1px; /* overlap the widget border for a continuous edge */
 }
 
 #ht_brw #widget a#kd-viz-toggle .kd-viz-toggle-icon {
     display: inline-flex;
-    width: 14px;
-    height: 14px;
-    color: #071013;
+    align-items: center;
+    width: 12px;
+    height: 12px;
+    color: var(--a);
+    opacity: 0.85;
 }
 
 #ht_brw #widget a#kd-viz-toggle .kd-viz-toggle-label {
@@ -925,17 +932,23 @@ html#ht_spl body {
 }
 
 #ht_brw #widget a#kd-viz-toggle:hover {
-    color: #071013;
-    background: linear-gradient(180deg, var(--a-hil) 0%, var(--a) 100%);
-    transform: translateX(-50%) translateY(-3px);
+    color: var(--a-hil);
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.12), rgba(0, 255, 150, 0.04));
+    border-color: var(--a);
     box-shadow:
-        0 -3px 12px rgba(0, 0, 0, 0.55),
-        0 -1px 0 rgba(255, 255, 255, 0.25) inset,
-        0 0 24px rgba(0, 255, 150, 0.6);
+        0 -2px 10px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 0 14px rgba(0, 255, 150, 0.22);
+    transform: translateX(-50%) translateY(-2px);
+}
+
+#ht_brw #widget a#kd-viz-toggle:hover .kd-viz-toggle-icon {
+    color: var(--a-hil);
+    opacity: 1;
 }
 
 #ht_brw #widget a#kd-viz-toggle:active {
-    transform: translateX(-50%) translateY(-1px);
+    transform: translateX(-50%) translateY(0);
 }
 
 #ht_brw #widget a#kd-viz-toggle.on {
@@ -946,17 +959,17 @@ html#ht_spl body {
 
 @media (max-width: 760px) {
     #ht_brw #widget a#kd-viz-toggle {
-        top: -20px;
-        height: 22px;
-        padding: 0 11px;
-        font-size: 10px;
+        top: -19px;
+        height: 20px;
+        padding: 0 10px;
+        font-size: 9px;
         letter-spacing: 0.14em;
         gap: 5px;
-        border-radius: 11px 11px 0 0;
+        border-radius: 7px 7px 0 0;
     }
     #ht_brw #widget a#kd-viz-toggle .kd-viz-toggle-icon {
-        width: 12px;
-        height: 12px;
+        width: 11px;
+        height: 11px;
     }
 }
 
