@@ -5396,6 +5396,7 @@ class HttpCli(object):
             "md_chk_rate": self.args.mcr,
             "md": boundary,
             "arg_base": arg_base,
+            "this": self,
         }
 
         if self.args.js_other and "js" not in targs:
@@ -7086,6 +7087,7 @@ class HttpCli(object):
             "title": html_escape("%s %s" % (self.args.bname, self.vpath), crlf=True),
             "srv_info": srv_infot,
             "dtheme": self.args.theme,
+            "this": self,
         }
 
         if self.args.js_browser:

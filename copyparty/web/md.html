@@ -12,10 +12,17 @@
 	{%- if edit %}
 	<link rel="stylesheet" href="{{ r }}/.cpr/w/md2.css?_={{ ts }}">
 	{%- endif %}
+	<link rel="stylesheet" href="{{ r }}/.cpr/w/kd-theme.css?_={{ ts }}">
 {{ html_head }}
 </head>
 
 <body>
+	<header class="kd-header">
+		<div class="kd-title"><h1>KD's Homebrew {{ this.args.kd_arch }} Archive</h1></div>
+		<nav class="kd-nav">
+			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
+		</nav>
+	</header>
 	<div id="mn"></div>
 	<div id="mh">
 		<a id="lightswitch" href="#">go dark</a>
@@ -54,6 +61,9 @@
 		<div id="mp" class="mdo"></div>
 	</div>
 	<a href="#" id="repl">π</a>
+	<footer class="kd-footer">
+		Served offline via KD's Homebrew {{ this.args.kd_arch }} Archive
+	</footer>
 
 	{%- if edit %}
 	<div id="helpbox">

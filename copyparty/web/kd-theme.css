@@ -1,0 +1,1311 @@
+/*
+ * KD's Homebrew Digital Archive — Kopyparty theme
+ *
+ * Dark CRT panel, neon-green accents, Share Tech Mono for monospace,
+ * Inter for body. Matched with kunaldawn.com, wiki.kunaldawn.com,
+ * and pdfarchive.kunaldawn.com. A shelf in a house.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600&display=swap');
+
+html,
+html.a,
+html.y,
+html.z,
+html.bz,
+html[class] {
+    color-scheme: dark;
+
+    --fg: #cfeee0;
+    --fg-max: #ffffff;
+    --fg2-max: #ffffff;
+    --fg-weak: #a8d8c4;
+
+    --bg: #071013;
+    --bg-u1: #0a1a22;
+    --bg-u2: #0b1d27;
+    --bg-u3: #0d2230;
+    --bg-u4: #112b3a;
+    --bg-u5: #16374b;
+    --bg-u6: #1a425a;
+    --bgg: var(--bg);
+    --bg-d1: #050c10;
+    --bg-d2: #03080b;
+    --bg-d3: #020507;
+    --bg-max: #000000;
+
+    --row-alt: rgba(0, 255, 150, 0.04);
+    --tab-alt: #7fffc1;
+
+    --scroll: rgba(0, 255, 150, 0.55);
+    --sel-fg: #071013;
+    --sel-bg: #00ff99;
+
+    --a: #00ff99;
+    --a-b: #00b36b;
+    --a-hil: #7fffc1;
+    --a-h-bg: rgba(0, 255, 150, 0.12);
+    --a-dark: #00b36b;
+    --a-gray: #7fd1b3;
+
+    --btn-fg: var(--a);
+    --btn-bg: rgba(0, 255, 150, 0.08);
+    --btn-h-fg: #071013;
+    --btn-h-bg: rgba(0, 255, 150, 0.35);
+    --btn-1-fg: #071013;
+    --btn-1-bg: var(--a);
+    --btn-1h-fg: #071013;
+    --btn-1h-bg: #7fffc1;
+
+    --chk-fg: var(--a);
+    --txt-sh: rgba(0, 255, 150, 0.3);
+    --txt-bg: rgba(0, 255, 150, 0.08);
+
+    --op-aa-fg: var(--a);
+    --op-aa-bg: rgba(0, 0, 0, 0.45);
+    --op-a-sh: rgba(0, 0, 0, 0.5);
+
+    --u2-btn-b1: rgba(0, 255, 150, 0.4);
+    --u2-sbtn-b1: rgba(0, 255, 150, 0.4);
+    --u2-txt-bg: var(--bg-u4);
+    --u2-tab-1-fg: #7fffc1;
+    --u2-tab-1-b1: #00ff99;
+    --u2-tab-1-b2: #00b36b;
+    --u2-tab-1-sh: rgba(0, 255, 150, 0.4);
+    --u2-inf-bg: #065;
+    --u2-inf-b1: #09a;
+    --u2-ok-bg: #063;
+    --u2-ok-b1: #0c7;
+    --u2-err-bg: #500;
+    --u2-err-b1: #d33;
+
+    --tree-bg: #071823;
+
+    --f-h-b1: rgba(0, 255, 150, 0.3);
+    --f-gray: #7fd1b3;
+
+    --srv-1: #a8d8c4;
+    --srv-2: #7fffc1;
+    --srv-3: #00ff99;
+    --srv-3b: rgba(0, 255, 150, 0.6);
+
+    --font-main: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'Share Tech Mono', 'SF Mono', 'Consolas', monospace;
+}
+
+/* ======================================================================
+   base
+   ====================================================================== */
+
+html,
+body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-main);
+}
+
+body {
+    background-image:
+        radial-gradient(1200px 400px at 10% 10%, rgba(0, 255, 150, 0.05), transparent),
+        radial-gradient(800px 800px at 90% 80%, rgba(0, 255, 150, 0.03), transparent);
+    background-attachment: fixed;
+    position: relative;
+}
+
+/* static retro scanline bars, sitting behind everything */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 255, 150, 0.035) 0px,
+        rgba(0, 255, 150, 0.035) 2px,
+        transparent 4px,
+        transparent 10px
+    );
+}
+
+/* static CRT scanline overlay — no mix-blend-mode, no flicker */
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    background-image: linear-gradient(transparent 50%, rgba(0, 0, 0, 0.18) 52%);
+    background-size: 100% 3px;
+    z-index: 9998;
+}
+
+/* ======================================================================
+   custom header
+   ====================================================================== */
+
+.kd-header {
+    background: linear-gradient(180deg, #071823, #031018);
+    color: #cfeee0;
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    font-family: var(--font-main);
+    border-bottom: 1px solid rgba(0, 255, 150, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
+    width: 100%;
+    position: sticky;
+    top: 0;
+    z-index: 2147483646;
+    flex-wrap: wrap;
+}
+
+.kd-header .kd-title {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    min-width: 0;
+}
+
+.kd-header .kd-title h1 {
+    margin: 0;
+    padding: 8px 22px;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--a);
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.1), rgba(0, 255, 150, 0.03));
+    border: 1px solid rgba(0, 255, 150, 0.35);
+    border-radius: 6px;
+    text-shadow:
+        0 0 10px rgba(0, 255, 150, 0.6),
+        0 0 20px rgba(0, 255, 150, 0.3);
+    box-shadow:
+        inset 0 0 20px rgba(0, 255, 150, 0.05),
+        0 0 30px rgba(0, 255, 150, 0.08);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.kd-header .kd-nav {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.kd-header .kd-logo-badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--a);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    text-shadow:
+        0 0 10px rgba(0, 255, 150, 0.7),
+        0 0 20px rgba(0, 255, 150, 0.4);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 6px 10px;
+    border: 1px solid rgba(0, 255, 150, 0.25);
+    border-radius: 5px;
+    white-space: nowrap;
+}
+
+.kd-header a.kd-link {
+    color: var(--a);
+    text-decoration: none;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 5px 10px;
+    border: 1px solid rgba(0, 255, 150, 0.25);
+    border-radius: 5px;
+    background: rgba(0, 255, 150, 0.08);
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.4);
+    white-space: nowrap;
+    line-height: 1.2;
+    transition: background .2s ease, box-shadow .2s ease;
+}
+
+.kd-header a.kd-link:hover {
+    background: rgba(0, 255, 150, 0.18);
+    box-shadow: 0 0 12px rgba(0, 255, 150, 0.25);
+    color: var(--a);
+}
+
+/* ======================================================================
+   custom footer — pinned to viewport bottom
+   ====================================================================== */
+
+.kd-footer {
+    background: linear-gradient(180deg, #031018, #020a10);
+    color: var(--fg-weak);
+    padding: 12px 15px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-top: 1px solid rgba(0, 255, 150, 0.2);
+    margin-top: auto;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.kd-footer::before {
+    content: "> ";
+    color: var(--a);
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.4);
+}
+
+/* hide the powered-by copyparty banner */
+#pb {
+    display: none !important;
+}
+
+/* pin footer to viewport bottom — body as flex column */
+html#ht_brw body,
+html#ht_spl body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+html#ht_brw #wrap {
+    flex: 1 0 auto;
+    min-height: 0;
+}
+
+html#ht_spl #wrap {
+    flex: 1 0 auto;
+}
+
+/* ======================================================================
+   splash page
+   ====================================================================== */
+
+html#ht_spl,
+html#ht_spl body {
+    background: var(--bg) !important;
+    color: var(--fg) !important;
+}
+
+#ht_spl #wrap {
+    margin: 1.5em auto 2em;
+    max-width: 52em;
+    padding: 0 1.2em 2em;
+    background: linear-gradient(180deg, var(--tree-bg), var(--bg-d1));
+    border: 1px solid rgba(0, 255, 150, 0.15);
+    border-radius: 10px;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.02),
+        0 0 60px rgba(0, 255, 150, 0.04);
+    padding-top: 1.2em;
+}
+
+#ht_spl h1 {
+    font-family: var(--font-mono);
+    font-size: 1.05rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--a);
+    border-bottom: 1px solid rgba(0, 255, 150, 0.25);
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.35);
+    padding-bottom: .35em;
+    margin: 1.6em 0 .5em;
+    font-weight: 700;
+}
+
+#ht_spl a,
+#ht_spl #lo {
+    color: var(--a);
+    background: rgba(0, 255, 150, 0.08);
+    border: 1px solid rgba(0, 255, 150, 0.3);
+    border-radius: .3em;
+    padding: .2em .6em;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3);
+    transition: background .2s ease, box-shadow .2s ease;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    letter-spacing: 0.05em;
+}
+
+#ht_spl a:hover,
+#ht_spl #lo:hover {
+    background: rgba(0, 255, 150, 0.18);
+    box-shadow: 0 0 12px rgba(0, 255, 150, 0.25);
+    color: var(--a-hil);
+}
+
+#ht_spl .vols td,
+#ht_spl .vols th,
+#ht_spl .num td {
+    color: var(--fg);
+    border-bottom: 1px solid rgba(0, 255, 150, 0.08);
+}
+
+#ht_spl .vols th {
+    color: var(--fg-weak);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.85em;
+}
+
+#ht_spl blockquote {
+    border-left-color: rgba(0, 255, 150, 0.4);
+    color: var(--fg-weak);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0 .3em .3em 0;
+}
+
+#ht_spl pre,
+#ht_spl code {
+    color: var(--a);
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(0, 255, 150, 0.2);
+    font-family: var(--font-mono);
+}
+
+#ht_spl li {
+    list-style: none;
+    padding: 0.35em 0;
+    border-bottom: 1px dashed rgba(0, 255, 150, 0.08);
+}
+
+#ht_spl ul {
+    padding-left: 0;
+}
+
+/* ======================================================================
+   browser page — main area
+   ====================================================================== */
+
+#ht_brw body {
+    background: var(--bg);
+    color: var(--fg);
+}
+
+/* breadcrumb path (#path) — mimic pdfarchive breadcrumb-nav */
+#ht_brw #path {
+    margin: 1em 1.5em 0;
+    padding: .6em 1em;
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.9), rgba(3, 16, 24, 0.95));
+    border: 1px solid rgba(0, 255, 150, 0.18);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 1em;
+    box-shadow:
+        inset 0 0 20px rgba(0, 255, 150, 0.03),
+        0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+#ht_brw #path a {
+    color: var(--fg-weak);
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    text-shadow: none;
+    background: transparent;
+    transition: all 0.2s ease;
+}
+
+#ht_brw #path a:hover {
+    color: var(--a);
+    background: rgba(0, 255, 150, 0.1);
+    border-color: rgba(0, 255, 150, 0.3);
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.5);
+}
+
+#ht_brw #path #entree {
+    font-size: 1.1em;
+    padding: 3px 8px;
+    color: var(--a);
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.4);
+}
+
+/* top toolbar (#ops) — icon bar above content */
+#ht_brw #ops {
+    margin: 0.7em 1.5em 0;
+    padding: 0.5em 0.8em;
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.7), rgba(3, 16, 24, 0.85));
+    border: 1px solid rgba(0, 255, 150, 0.12);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+#ht_brw #ops a {
+    color: var(--a);
+    font-size: 1.2em;
+    padding: .2em .5em;
+    border-radius: 4px;
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.3);
+    transition: background .2s ease;
+}
+
+#ht_brw #ops a:hover {
+    background: rgba(0, 255, 150, 0.12);
+}
+
+#ht_brw #ops a.act {
+    color: var(--a);
+    background: rgba(0, 255, 150, 0.15);
+    border-bottom: 2px solid var(--a);
+    border-radius: 4px 4px 0 0;
+    text-shadow: 0 0 10px rgba(0, 255, 150, 0.6);
+}
+
+/* opview panels (expanded toolbars) */
+#ht_brw .opview.act {
+    margin: 0.4em 1.5em 0;
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.85), rgba(3, 16, 24, 0.9));
+    border: 1px solid rgba(0, 255, 150, 0.18);
+    border-radius: 0 8px 8px 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    padding: 0.8em;
+    max-width: none;
+}
+
+/* main listing panel (#wrap area with #files table) */
+#ht_brw #wrap {
+    margin: 1em 1.5em 0;
+    padding: 1.2em 1.5em 3em;
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.85), rgba(3, 16, 24, 0.92));
+    border: 1px solid rgba(0, 255, 150, 0.15);
+    border-radius: 10px;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.02),
+        0 0 60px rgba(0, 255, 150, 0.04);
+}
+
+/* file table styling */
+#ht_brw #files {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+#ht_brw #files thead th {
+    padding: 0.7em 0.6em;
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.1), rgba(0, 255, 150, 0.03));
+    color: var(--a);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.35);
+    border-bottom: 1px solid rgba(0, 255, 150, 0.3);
+}
+
+#ht_brw #files tbody td {
+    padding: 0.5em 0.6em;
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.06);
+    color: var(--fg);
+}
+
+#ht_brw #files tbody tr:hover td,
+#ht_brw #files tbody tr:hover td + td {
+    background: rgba(0, 255, 150, 0.06);
+    box-shadow:
+        inset 0 1px 0 rgba(0, 255, 150, 0.15),
+        inset 0 -1px 0 rgba(0, 255, 150, 0.15);
+}
+
+#ht_brw #files tbody a {
+    color: var(--a);
+    padding: 0.4em 0;
+    text-decoration: none;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.2);
+}
+
+#ht_brw #files a:hover {
+    color: var(--a-hil);
+    background: transparent;
+    text-decoration: underline;
+    text-shadow: 0 0 10px rgba(0, 255, 150, 0.5);
+}
+
+#ht_brw #files thead a {
+    color: var(--fg-weak);
+    text-shadow: none;
+    font-size: inherit;
+}
+
+/* left tree sidebar */
+#ht_brw #tree {
+    background: var(--tree-bg);
+    border-right: 1px solid rgba(0, 255, 150, 0.15);
+    box-shadow:
+        inset -1px 0 0 rgba(0, 255, 150, 0.05),
+        2px 0 14px rgba(0, 0, 0, 0.4);
+}
+
+#ht_brw #treeh {
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.08), rgba(0, 255, 150, 0.02));
+    border-bottom: 1px solid rgba(0, 255, 150, 0.15);
+}
+
+#ht_brw #tree a {
+    color: var(--fg-weak);
+}
+
+#ht_brw #tree a:hover {
+    color: var(--a);
+    background: rgba(0, 255, 150, 0.08);
+}
+
+/* "control-panel | prev / up / next" footer-links — style as breadcrumb */
+#ht_brw h2#wfp {
+    margin: 1.5em 0 .5em;
+    padding: .5em 0;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    border-top: 1px dashed rgba(0, 255, 150, 0.15);
+}
+
+#ht_brw h2#wfp a {
+    color: var(--a);
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3);
+}
+
+/* srv_info ticker — tuck under header */
+#ht_brw #srv_info {
+    color: var(--fg-weak);
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 0.75em;
+    opacity: 0.7;
+    top: auto;
+    bottom: 2.6em;
+    left: auto;
+    right: .8em;
+    text-align: right;
+}
+
+/* repl button (π) — keep subtle */
+#repl {
+    color: var(--a) !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3);
+}
+
+/* ======================================================================
+   fixed elements must not overlap the footer
+   ====================================================================== */
+
+/* ======================================================================
+   trim the chrome: no top action toolbar, no sidebar, no bottom widget,
+   no version/space-free ticker. Only breadcrumb + grid + footer remain.
+   ====================================================================== */
+
+#ht_brw #ops,
+#ht_brw #tree,
+#ht_brw #detree,
+#ht_brw #treeh,
+#ht_brw #path #entree,
+#ht_brw #wtoggle,
+#ht_brw #srv_info,
+#ht_brw #srv_info2,
+#ht_brw #goh,
+#ht_brw #repl,
+#ht_spl #repl,
+#ht_md #repl,
+#ht_md #lightswitch,
+#ht_md #navtoggle,
+#ht_md #mh a[href$="edit"],
+#ht_md #mh a[href$="edit2"],
+#ht_md #mh a#edit2,
+#ht_md #mh a#save,
+#ht_md #mh a#sbs,
+#ht_md #mh a#nsbs,
+#ht_md #toolsbox {
+    display: none !important;
+}
+
+/* music player widget: hidden until music plays (copyparty adds .open),
+   then rendered inline as a rounded neon panel between the wrap and the footer */
+#ht_brw #widget:not(.open) {
+    display: none !important;
+}
+
+#ht_brw #widget.open {
+    display: block !important;
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 1.5em 1em !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    flex-shrink: 0 !important;
+    z-index: auto !important;
+    font-size: 1.2em !important;
+}
+
+/* Card panel around the player internals */
+#ht_brw #widget.open #widgeti {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    height: 5.2em !important;
+    box-sizing: border-box !important;
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.95), rgba(3, 16, 24, 0.98)) !important;
+    border: 1px solid rgba(0, 255, 150, 0.28) !important;
+    border-radius: 10px !important;
+    box-shadow:
+        0 6px 20px rgba(0, 0, 0, 0.45),
+        0 0 24px rgba(0, 255, 150, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+    overflow: hidden !important;
+}
+
+/* play/prev/next buttons */
+#ht_brw #pctl {
+    top: 0.6em !important;
+    left: 0.8em !important;
+}
+
+#ht_brw #pctl a {
+    color: var(--a) !important;
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(0, 255, 150, 0.3) !important;
+    border-radius: 6px !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.4) !important;
+    margin-right: 0.3em !important;
+    width: 1.5em !important;
+    height: 1.4em !important;
+    line-height: 1.35em !important;
+    transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+
+#ht_brw #pctl a:hover {
+    background: rgba(0, 255, 150, 0.18) !important;
+    border-color: var(--a) !important;
+    color: var(--a-hil) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.35) !important;
+}
+
+/* progress-bar container (rail) */
+#ht_brw #barbuf {
+    background: rgba(0, 0, 0, 0.45) !important;
+    border: 1px solid rgba(0, 255, 150, 0.18) !important;
+    box-shadow: inset 0 0 6px rgba(0, 255, 150, 0.06) !important;
+}
+
+/* volume canvas */
+#ht_brw #pvol {
+    background: rgba(0, 0, 0, 0.45) !important;
+    border: 1px solid rgba(0, 255, 150, 0.22) !important;
+}
+
+/* hide the "now playing info" panel (thumbnail + metadata) — keep only controls */
+#ht_brw #np_inf {
+    display: none !important;
+}
+
+/* ======================================================================
+   document viewer (opens when clicking a .txt / .md file)
+   #hdoc is the toolbar; .mdo is the rendered markdown body (lives in iframe too)
+   ====================================================================== */
+
+/* trim the toolbar: remove select / jump / edit / follow-log controls */
+#ht_brw #seldoc,
+#ht_brw #ppjdoc,
+#ht_brw #editdoc,
+#ht_brw #taildoc,
+#ht_brw #tailbtns {
+    display: none !important;
+}
+
+/* sit the doc viewer inside the vault panel like the file grid */
+#ht_brw #bdoc {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* raw text dump (inside <pre>) — monospace neon on dark */
+#ht_brw #bdoc > pre {
+    background: rgba(0, 0, 0, 0.45) !important;
+    color: var(--fg) !important;
+    border: 1px solid rgba(0, 255, 150, 0.18) !important;
+    border-radius: 8px !important;
+    padding: 1em 1.2em !important;
+    margin: 1em 0 !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.9em !important;
+    line-height: 1.5em !important;
+    box-shadow: inset 0 0 20px rgba(0, 255, 150, 0.04) !important;
+}
+
+/* ======================================================================
+   rendered markdown (.mdo) — applied inside the sandbox iframe too,
+   because copyparty injects all linked stylesheets into the iframe srcdoc.
+   ====================================================================== */
+
+.mdo,
+.mdo p,
+.mdo li,
+.mdo td {
+    color: var(--fg);
+    font-family: var(--font-main);
+}
+
+.mdo h1,
+.mdo h2,
+.mdo h3,
+.mdo h4,
+.mdo h5,
+.mdo h6 {
+    color: var(--a);
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 10px rgba(0, 255, 150, 0.3);
+    border-radius: 0;
+}
+
+.mdo h1 {
+    font-size: 1.6em !important;
+    font-weight: 700;
+    text-align: left !important;
+    text-transform: uppercase;
+    border: none !important;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.35) !important;
+    padding: 0.4em 0 !important;
+    margin: 1em 0 0.6em !important;
+    background: transparent !important;
+}
+
+.mdo h2 {
+    font-size: 1.3em !important;
+    font-weight: 600;
+    text-transform: none;
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.08), rgba(0, 255, 150, 0.02)) !important;
+    border: 1px solid rgba(0, 255, 150, 0.25) !important;
+    border-radius: 6px !important;
+    padding: 0.35em 0.8em !important;
+    margin: 1.4em 0 0.6em !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.mdo h3 {
+    font-size: 1.1em !important;
+    border: none !important;
+    border-bottom: 1px dashed rgba(0, 255, 150, 0.25) !important;
+    padding-bottom: 0.2em !important;
+}
+
+.mdo a,
+.mdo a:link,
+.mdo a:visited {
+    color: var(--a) !important;
+    background: rgba(0, 255, 150, 0.08) !important;
+    border: 1px solid rgba(0, 255, 150, 0.25) !important;
+    border-radius: 4px !important;
+    padding: 0.05em 0.35em !important;
+    margin: 0 0.1em !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3) !important;
+    font-family: inherit !important;
+}
+
+.mdo a:hover {
+    background: rgba(0, 255, 150, 0.18) !important;
+    box-shadow: 0 0 8px rgba(0, 255, 150, 0.25) !important;
+}
+
+.mdo code,
+.mdo pre,
+.mdo tt {
+    color: var(--a-hil) !important;
+    background: rgba(0, 0, 0, 0.45) !important;
+    border: 1px solid rgba(0, 255, 150, 0.2) !important;
+    border-radius: 4px !important;
+    font-family: var(--font-mono) !important;
+}
+
+.mdo code {
+    padding: 0.1em 0.35em !important;
+    font-size: 0.9em !important;
+}
+
+.mdo pre {
+    padding: 0.8em 1em !important;
+    overflow-x: auto !important;
+    box-shadow: inset 0 0 10px rgba(0, 255, 150, 0.05) !important;
+}
+
+.mdo pre code {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    color: inherit !important;
+}
+
+.mdo strong {
+    color: var(--fg-max) !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.25);
+}
+
+.mdo em,
+.mdo p > em,
+.mdo li > em,
+.mdo td > em {
+    color: var(--a-hil) !important;
+    font-style: italic;
+    background: transparent !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3);
+}
+
+.mdo blockquote {
+    background: rgba(0, 0, 0, 0.25) !important;
+    border: none !important;
+    border-left: 3px solid var(--a) !important;
+    color: var(--fg-weak) !important;
+    border-radius: 0 6px 6px 0 !important;
+    padding: 0.4em 1em !important;
+    margin: 1em 0 !important;
+}
+
+.mdo ul,
+.mdo ol {
+    padding-left: 1.6em;
+}
+
+.mdo ul > li,
+.mdo ol > li {
+    margin: 0.3em 0;
+}
+
+.mdo ul ul,
+.mdo ul ol,
+.mdo ol ul,
+.mdo ol ol {
+    border-left-color: rgba(0, 255, 150, 0.2) !important;
+}
+
+.mdo table {
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+
+.mdo th,
+.mdo td {
+    border: 1px solid rgba(0, 255, 150, 0.18) !important;
+    padding: 0.4em 0.8em !important;
+}
+
+.mdo th {
+    background: rgba(0, 255, 150, 0.08) !important;
+    color: var(--a) !important;
+    font-family: var(--font-mono) !important;
+}
+
+/* also make sure the iframe body gets the dark bg, not the #eee fallback */
+html.iframe,
+html.iframe body,
+html.iframe body.logue {
+    background: var(--bg) !important;
+    color: var(--fg) !important;
+}
+
+/* strip the scanline overlay inside iframes — it looks awful layered twice */
+html.iframe body::before,
+html.iframe body::after {
+    display: none !important;
+}
+
+/* ======================================================================
+   standalone markdown viewer page (md.html, reached via /file.md?v)
+   ====================================================================== */
+
+html#ht_md,
+html#ht_md body {
+    background: var(--bg) !important;
+    color: var(--fg) !important;
+    font-family: var(--font-main) !important;
+}
+
+html#ht_md body {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 100vh !important;
+}
+
+/* toolbar (top bar with "view raw" etc.) — rounded dark panel */
+html#ht_md #mh {
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.9), rgba(3, 16, 24, 0.95)) !important;
+    border: 1px solid rgba(0, 255, 150, 0.18) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    margin: 1em 1.5em !important;
+    padding: 0.6em 1em !important;
+    position: static !important;
+    color: var(--fg) !important;
+}
+
+html#ht_md #mh a {
+    color: var(--a) !important;
+    background: rgba(0, 255, 150, 0.08) !important;
+    border: 1px solid rgba(0, 255, 150, 0.28) !important;
+    border-radius: 4px !important;
+    padding: 3px 10px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.85em !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    text-shadow: none !important;
+    margin: 0 2px !important;
+    text-decoration: none !important;
+}
+
+html#ht_md #mh a:hover {
+    background: rgba(0, 255, 150, 0.18) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.25) !important;
+}
+
+/* table-of-contents sidebar */
+html#ht_md #toc {
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.9), rgba(3, 16, 24, 0.95)) !important;
+    border: 1px solid rgba(0, 255, 150, 0.12) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    margin: 1em !important;
+    padding: 0.8em !important;
+    color: var(--fg) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.85em !important;
+    scrollbar-color: var(--scroll) var(--bg-u3) !important;
+}
+
+html#ht_md #toc a {
+    color: var(--fg-weak) !important;
+    text-decoration: none !important;
+    display: block !important;
+    padding: 0.2em 0.4em !important;
+    border-radius: 3px !important;
+}
+
+html#ht_md #toc a:hover,
+html#ht_md #toc a.hl,
+html#ht_md #toc a.act {
+    color: var(--a) !important;
+    background: rgba(0, 255, 150, 0.15) !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.4) !important;
+}
+
+/* content area — vault panel like the grid */
+html#ht_md #mw {
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.85), rgba(3, 16, 24, 0.92)) !important;
+    border: 1px solid rgba(0, 255, 150, 0.15) !important;
+    border-radius: 10px !important;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.02),
+        0 0 60px rgba(0, 255, 150, 0.04) !important;
+    margin: 1em 1.5em 1em !important;
+    padding: 1.2em 1.5em !important;
+    flex: 1 0 auto !important;
+    scrollbar-color: var(--scroll) var(--bg-u3) !important;
+}
+
+html#ht_md #mp {
+    color: var(--fg) !important;
+}
+
+/* the little breadcrumb copyparty puts at the top-left ("top > extend.md") */
+html#ht_md #mn {
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.9), rgba(3, 16, 24, 0.95)) !important;
+    border: 1px solid rgba(0, 255, 150, 0.18) !important;
+    border-radius: 8px !important;
+    margin: 1em 1.5em 0 !important;
+    padding: 0.6em 1em !important;
+    font-family: var(--font-mono) !important;
+    color: var(--fg-weak) !important;
+    position: static !important;
+}
+
+html#ht_md #mn a {
+    color: var(--fg-weak) !important;
+    text-decoration: none !important;
+    padding: 0 6px !important;
+}
+
+html#ht_md #mn a:hover {
+    color: var(--a) !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3) !important;
+}
+
+/* CONTROL-PANEL link is gone — drop its trailing divider before prev/up/next */
+#ht_brw #goh + span {
+    border-left: none !important;
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+}
+
+/* since the sidebar is gone, reclaim that space for the main wrap.
+   also mirror the top gap (1em between header and breadcrumb) below the wrap */
+#ht_brw #wrap {
+    margin-left: 1.5em !important;
+    margin-bottom: 1em !important;
+}
+
+/* ======================================================================
+   lock grid view on — hide the list/grid toggle in settings
+   ====================================================================== */
+
+#ht_brw #griden,
+#ht_brw #griden + label,
+#ht_brw label[for="griden"],
+#ht_brw label:has(#griden) {
+    display: none !important;
+}
+
+/* ======================================================================
+   grid-head toolbar (multiselect / crop / zoom / chop / sort)
+   — more contrast, match sibling-site buttons
+   ====================================================================== */
+
+#ht_brw .ghead {
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.9), rgba(3, 16, 24, 0.95));
+    border: 1px solid rgba(0, 255, 150, 0.18);
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    line-height: 2.1em;
+}
+
+#ht_brw .ghead > span {
+    color: var(--fg-weak);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+}
+
+#ht_brw .ghead a,
+#ht_brw .ghead a.btn,
+#ht_brw .ghead a.tgl,
+#ht_brw .ghead a.tgl.btn {
+    color: var(--fg);
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0, 255, 150, 0.3);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-shadow: none;
+    transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
+    margin: 0 2px;
+    box-shadow: none;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.3);
+}
+
+#ht_brw .ghead a.tgl.btn:hover,
+#ht_brw .ghead a.btn:hover,
+#ht_brw .ghead a:hover {
+    color: var(--a);
+    background: rgba(0, 255, 150, 0.15);
+    border-color: var(--a);
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.25);
+}
+
+#ht_brw .ghead a.tgl.btn.on {
+    color: #071013;
+    background: var(--a);
+    border-color: var(--a);
+    border-bottom-color: var(--a);
+    text-shadow: none;
+    box-shadow: 0 0 12px rgba(0, 255, 150, 0.45);
+}
+
+#ht_brw .ghead a.tgl.btn.on:hover {
+    color: #071013;
+    background: var(--a-hil);
+    box-shadow: 0 0 16px rgba(0, 255, 150, 0.6);
+}
+
+/* sort indicator chevrons */
+#ht_brw .ghead a.s0:after,
+#ht_brw .ghead a.s1:after,
+#ht_brw .ghead a.s0r:after,
+#ht_brw .ghead a.s1r:after {
+    color: var(--a);
+}
+
+/* ZIP button injected at the end of the grid toolbar */
+#ht_brw .ghead a.kd-zip-btn {
+    float: right;
+    color: #071013;
+    background: var(--a);
+    border-color: var(--a);
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.35);
+    font-weight: 700;
+}
+
+#ht_brw .ghead a.kd-zip-btn:hover {
+    color: #071013;
+    background: var(--a-hil);
+    border-color: var(--a-hil);
+    box-shadow: 0 0 14px rgba(0, 255, 150, 0.55);
+}
+
+/* ======================================================================
+   generic .btn contrast bump (used in many copyparty chrome elements)
+   ====================================================================== */
+
+#ht_brw a.btn,
+#ht_brw .tgl.btn {
+    color: var(--fg);
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0, 255, 150, 0.3);
+    border-radius: 4px;
+    text-shadow: none;
+}
+
+#ht_brw a.btn:hover,
+#ht_brw .tgl.btn:hover {
+    color: var(--a);
+    background: rgba(0, 255, 150, 0.15);
+    border-color: var(--a);
+}
+
+#ht_brw a.btn.on,
+#ht_brw .tgl.btn.on {
+    color: #071013;
+    background: var(--a);
+    border-color: var(--a);
+    text-shadow: none;
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.4);
+}
+
+#ht_brw a.btn.on:hover,
+#ht_brw .tgl.btn.on:hover {
+    color: #071013;
+    background: var(--a-hil);
+    border-color: var(--a-hil);
+}
+
+/* ======================================================================
+   loaders — neon-green CRT ring matching the rest of the theme
+   ====================================================================== */
+
+/* page loader (shown during fetches) — hide the emoji, draw a CSS ring */
+.dumb_loader_thing {
+    font-size: 0 !important;
+    color: transparent !important;
+    width: 2.6rem !important;
+    height: 2.6rem !important;
+    min-width: 2.6rem !important;
+    min-height: 2.6rem !important;
+    padding: 0 !important;
+    margin: 1rem !important;
+    border: 3px solid rgba(0, 255, 150, 0.18) !important;
+    border-top-color: var(--a) !important;
+    border-radius: 50% !important;
+    box-shadow:
+        0 0 10px rgba(0, 255, 150, 0.35),
+        inset 0 0 6px rgba(0, 255, 150, 0.15) !important;
+    background: transparent !important;
+    box-sizing: border-box !important;
+    animation: 1s linear .15s infinite forwards spin, .2s ease .15s 1 forwards fadein !important;
+}
+
+/* image/video lightbox loader (baguettebox) — neon bouncing dots */
+.bbox-double-bounce1,
+.bbox-double-bounce2 {
+    background-color: var(--a) !important;
+    opacity: 0.7 !important;
+    box-shadow: 0 0 18px rgba(0, 255, 150, 0.55);
+}
+
+/* ======================================================================
+   scrollbars
+   ====================================================================== */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0, 255, 150, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 255, 150, 0.25);
+    border-radius: 5px;
+    border: 1px solid rgba(0, 255, 150, 0.1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 255, 150, 0.5);
+    box-shadow: 0 0 6px rgba(0, 255, 150, 0.35);
+}
+
+::-webkit-scrollbar-corner {
+    background: rgba(0, 0, 0, 0.35);
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 255, 150, 0.3) rgba(0, 0, 0, 0.35);
+}
+
+/* ======================================================================
+   responsive tweaks
+   ====================================================================== */
+
+@media (max-width: 760px) {
+    .kd-header {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .kd-header .kd-title h1 {
+        font-size: 12px;
+        padding: 6px 14px;
+        letter-spacing: 0.15em;
+    }
+    .kd-header a.kd-link {
+        font-size: 11px;
+        padding: 4px 8px;
+    }
+    #ht_brw #wrap,
+    #ht_brw #path,
+    #ht_brw #ops,
+    #ht_brw .opview.act {
+        margin-left: 0.6em;
+        margin-right: 0.6em;
+    }
+}

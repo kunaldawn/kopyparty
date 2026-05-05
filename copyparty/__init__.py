@@ -88,6 +88,7 @@ web/deps/sha512.ac.js
 web/deps/sha512.hw.js
 web/idp.html
 web/iiam.gif
+web/kd-theme.css
 web/md.css
 web/md.html
 web/md.js

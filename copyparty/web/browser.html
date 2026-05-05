@@ -9,6 +9,7 @@
 	<meta name="theme-color" content="#{{ tcolor }}">
 	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/ui.css?_={{ ts }}">
 	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/browser.css?_={{ ts }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/kd-theme.css?_={{ ts }}">
 {{ html_head }}
 	{%- if css %}
 	<link rel="stylesheet" media="screen" href="{{ css }}_={{ ts }}">
@@ -16,6 +17,13 @@
 </head>
 
 <body>
+	<header class="kd-header">
+		<div class="kd-title"><h1>KD's Homebrew {{ this.args.kd_arch }} Archive</h1></div>
+		<nav class="kd-nav">
+			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
+		</nav>
+	</header>
+
 	<div id="ops"></div>
 
 	<div id="op_search" class="opview">
@@ -131,6 +139,10 @@
 
 	<div id="rcm" tabindex="0"></div>
 
+	<footer class="kd-footer">
+		Served offline via KD's Homebrew {{ this.args.kd_arch }} Archive
+	</footer>
+
 	<script>
 		var SR = "{{ r }}",
 			CGV1 = {{ cgv1 }},
@@ -162,6 +174,31 @@
 		jsldp("J_BBX","baguettebox");
 		jsldp("J_BRW","browser");
 		jsldp("J_U2K","up2k");
+	</script>
+	<script>
+		(function () {
+			var vp = location.pathname.replace(/\/+$/, '');
+			if (!vp) return;  // root → no zip
+			var tries = 0;
+			var inject = function () {
+				if (document.getElementById('kd-zip')) return true;
+				var gh = document.getElementById('ghead');
+				if (!gh) return false;
+				var a = document.createElement('a');
+				a.id = 'kd-zip';
+				a.href = '?zip';
+				a.className = 'btn kd-zip-btn';
+				a.rel = 'nofollow';
+				a.textContent = '📦 ZIP';
+				a.title = 'download this folder as zip';
+				gh.appendChild(a);
+				return true;
+			};
+			if (inject()) return;
+			var timer = setInterval(function () {
+				if (inject() || ++tries > 50) clearInterval(timer);
+			}, 100);
+		})();
 	</script>
 </body>
 </html>
