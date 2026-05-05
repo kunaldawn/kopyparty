@@ -15,7 +15,8 @@ services:
       - --no-crt
       - --no-thumb
       - --grid
-      - --kd-arch=${KOPYPARTY_ARCH_TYPE:-Data}
+      - --kd-header=${KOPYPARTY_HEADER:-KD's Homebrew Data Archive}
+      - --kd-footer=${KOPYPARTY_FOOTER:-Served offline via KD's Homebrew Data Archive}
       - -i
       - 0.0.0.0
       - -p

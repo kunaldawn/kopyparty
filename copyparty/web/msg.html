@@ -7,12 +7,17 @@
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta name="viewport" content="width=device-width, initial-scale=0.8">
 	<meta name="theme-color" content="#{{ tcolor }}">
-<style>:root{--font-main:sans-serif;--font-mono:monospace}
-html,body,a{margin:0;padding:0;border:none;color:#ccc;background:none;font-family:sans-serif;font-family:var(--font-main),sans-serif}
-pre{font-family:monospace,monospace;font-family:var(--font-mono),monospace}
-html{touch-action:manipulation;background:#333}
-#box{padding:.5em 1em;background:#2c2c2c}
-a{color:#fc5}</style>
+<link rel="stylesheet" href="{{ r }}/.cpr/w/kd-theme.css?_={{ ts }}">
+<style>:root{--font-main:'Inter',sans-serif;--font-mono:'Share Tech Mono',monospace}
+html,body,a{margin:0;padding:0;border:none;font-family:var(--font-main),sans-serif}
+pre{font-family:var(--font-mono),monospace}
+html{touch-action:manipulation;background:#071013;color:#cfeee0}
+body{padding:2em}
+#box{padding:1em 1.4em;background:linear-gradient(180deg,rgba(7,24,35,0.9),rgba(3,16,24,0.95));border:1px solid rgba(0,255,150,0.2);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.4),0 0 30px rgba(0,255,150,0.05);max-width:48em;margin:1em auto}
+#box h1{color:#00ff99;font-family:var(--font-mono),monospace;text-shadow:0 0 8px rgba(0,255,150,0.35);text-transform:uppercase;letter-spacing:0.08em}
+#box h2{color:#7fffc1;font-family:var(--font-mono),monospace}
+#box pre{color:#00ff99;background:rgba(0,0,0,0.45);border:1px solid rgba(0,255,150,0.18);border-radius:4px;padding:.6em .9em}
+a{color:#00ff99}</style>
 {{ html_head }}
 </head>
 

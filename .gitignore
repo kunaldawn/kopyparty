@@ -6,6 +6,7 @@ MANIFEST.in
 MANIFEST
 copyparty.egg-info/
 .venv/
+.playwright-cache/
 
 /buildenv/
 /build/

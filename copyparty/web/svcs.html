@@ -9,11 +9,18 @@
 	<meta name="theme-color" content="#{{ tcolor }}">
 	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/splash.css?_={{ ts }}">
 	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/ui.css?_={{ ts }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/kd-theme.css?_={{ ts }}">
 	<style>ul{padding-left:1.3em}li{margin:.4em 0}.txa{float:right;margin:0 0 0 1em}</style>
 {{ html_head }}
 </head>
 
 <body>
+	<header class="kd-header">
+		<div class="kd-title"><h1>{{ args.kd_header|e }}</h1></div>
+		<nav class="kd-nav">
+			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
+		</nav>
+	</header>
 	<div id="wrap" class="w">
         <div class="cn">
             <p class="btns"><a href="/{{ rvp }}">browse files</a> // <a href="{{ r }}/?h">control panel</a></p>
@@ -347,6 +354,9 @@
 
     </div>
 	<a href="#" id="repl">π</a>
+	<footer class="kd-footer">
+		{{ args.kd_footer|e }}
+	</footer>
 	<script>
 
 var SR="{{ r }}",

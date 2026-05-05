@@ -10,10 +10,17 @@
 	<meta name="theme-color" content="#{{ tcolor }}">
 	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/rups.css?_={{ ts }}">
 	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/ui.css?_={{ ts }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.cpr/w/kd-theme.css?_={{ ts }}">
 {{ html_head }}
 </head>
 
 <body>
+	<header class="kd-header">
+		<div class="kd-title"><h1>{{ this.args.kd_header|e }}</h1></div>
+		<nav class="kd-nav">
+			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
+		</nav>
+	</header>
 	<div id="wrap">
         <a href="#" id="re">refresh</a>
         <a href="{{ r }}/?h">control-panel</a>
@@ -22,6 +29,9 @@
         <div id="tw"></div>
     </div>
 	<a href="#" id="repl">π</a>
+	<footer class="kd-footer">
+		{{ this.args.kd_footer|e }}
+	</footer>
 	<script>
 
 var SR="{{ r }}",

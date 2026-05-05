@@ -1120,6 +1120,119 @@ html#ht_md #mn a:hover {
     text-shadow: 0 0 6px rgba(0, 255, 150, 0.3) !important;
 }
 
+/* ======================================================================
+   auxiliary pages (recent uploads, services/connect)
+   — share splash.html styling so they pick up vault panel + footer pinning
+   ====================================================================== */
+
+html#ht_rup,
+html#ht_rup body,
+html#ht_svc,
+html#ht_svc body {
+    background: var(--bg) !important;
+    color: var(--fg) !important;
+    font-family: var(--font-main) !important;
+}
+
+html#ht_rup body,
+html#ht_svc body {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 100vh !important;
+}
+
+html#ht_rup #wrap,
+html#ht_svc #wrap {
+    flex: 1 0 auto !important;
+    margin: 1em auto 1em !important;
+    max-width: 60em !important;
+    padding: 1em 1.4em !important;
+    background: linear-gradient(180deg, var(--tree-bg), var(--bg-d1)) !important;
+    border: 1px solid rgba(0, 255, 150, 0.15) !important;
+    border-radius: 10px !important;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.02),
+        0 0 60px rgba(0, 255, 150, 0.04) !important;
+}
+
+html#ht_rup #wrap a,
+html#ht_svc #wrap a {
+    color: var(--a) !important;
+    background: rgba(0, 255, 150, 0.08) !important;
+    border: 1px solid rgba(0, 255, 150, 0.3) !important;
+    border-radius: 4px !important;
+    padding: 0.15em 0.5em !important;
+    margin: 0 0.15em !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.9em !important;
+    text-decoration: none !important;
+}
+
+html#ht_rup #wrap a:hover,
+html#ht_svc #wrap a:hover {
+    background: rgba(0, 255, 150, 0.18) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.25) !important;
+}
+
+html#ht_rup h1,
+html#ht_svc h1 {
+    color: var(--a) !important;
+    font-family: var(--font-mono) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.25);
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.3);
+    padding-bottom: 0.3em;
+}
+
+html#ht_rup pre,
+html#ht_svc pre,
+html#ht_rup code,
+html#ht_svc code {
+    color: var(--a-hil) !important;
+    background: rgba(0, 0, 0, 0.45) !important;
+    border: 1px solid rgba(0, 255, 150, 0.2) !important;
+    border-radius: 4px !important;
+    font-family: var(--font-mono) !important;
+}
+
+html#ht_rup #repl,
+html#ht_svc #repl {
+    display: none !important;
+}
+
+html#ht_rup input[type="text"],
+html#ht_svc input[type="text"] {
+    background: rgba(0, 0, 0, 0.45) !important;
+    color: var(--fg) !important;
+    border: 1px solid rgba(0, 255, 150, 0.3) !important;
+    border-radius: 4px !important;
+    padding: 0.3em 0.6em !important;
+    font-family: var(--font-mono) !important;
+}
+
+/* rups.html upload table */
+html#ht_rup #tw table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1em;
+}
+
+html#ht_rup #tw th,
+html#ht_rup #tw td {
+    border: 1px solid rgba(0, 255, 150, 0.15) !important;
+    padding: 0.3em 0.5em !important;
+}
+
+html#ht_rup #tw th {
+    background: rgba(0, 255, 150, 0.08) !important;
+    color: var(--a) !important;
+    font-family: var(--font-mono) !important;
+    text-transform: uppercase;
+}
+
 /* CONTROL-PANEL link is gone — drop its trailing divider before prev/up/next */
 #ht_brw #goh + span {
     border-left: none !important;

@@ -18,7 +18,7 @@
 
 <body>
 	<header class="kd-header">
-		<div class="kd-title"><h1>KD's Homebrew {{ this.args.kd_arch }} Archive</h1></div>
+		<div class="kd-title"><h1>{{ this.args.kd_header|e }}</h1></div>
 		<nav class="kd-nav">
 			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
 		</nav>
@@ -62,7 +62,7 @@
 	</div>
 	<a href="#" id="repl">π</a>
 	<footer class="kd-footer">
-		Served offline via KD's Homebrew {{ this.args.kd_arch }} Archive
+		{{ this.args.kd_footer|e }}
 	</footer>
 
 	{%- if edit %}
