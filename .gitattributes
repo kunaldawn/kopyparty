@@ -5,3 +5,6 @@
 *.png binary
 *.gif binary
 *.gz binary
+*.mem binary
+*.wasm binary
+*.woff2 binary

@@ -18,6 +18,7 @@
 
 <body>
 	<header class="kd-header">
+		<a class="kd-link kd-mobile-only" id="kd-mobile-tree-toggle" href="#" aria-label="toggle folder tree">≡</a>
 		<div class="kd-title"><h1>{{ this.args.kd_header|e }}</h1></div>
 		<nav class="kd-nav">
 			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
@@ -165,6 +166,7 @@
 	<script src="{{ r }}/.kpr/w/baguettebox.js?_={{ ts }}"></script>
 	<script src="{{ r }}/.kpr/w/browser.js?_={{ ts }}"></script>
 	<script src="{{ r }}/.kpr/w/up2k.js?_={{ ts }}"></script>
+	<script src="{{ r }}/.kpr/w/kd-chiptune.js?_={{ ts }}"></script>
 	{%- if js %}
 	<script src="{{ js }}_={{ ts }}"></script>
 	{%- endif %}
@@ -217,6 +219,7 @@
 		// (the file-grid container) so the player visually matches the
 		// grid's leading edge regardless of tree-sidebar state. We measure
 		// #ggrid's actual screen rect and translate that to widget margins.
+		// On mobile the kd-theme @media block clamps these via !important.
 		(function () {
 			var sync = function () {
 				var ggrid = document.getElementById('ggrid');
@@ -241,6 +244,52 @@
 			var t = 0, w = setInterval(function () {
 				if (attach() || ++t > 50) clearInterval(w);
 			}, 100);
+		})();
+
+		// Mobile drawer toggle — the tree sidebar becomes a slide-out
+		// overlay at <=760px. CSS hides #tree by default and reveals it
+		// when body has the `kd-mobile-tree-open` class. We toggle that
+		// class via the ≡ button in the header and dismiss it on backdrop
+		// click (the body::before pseudo-element area).
+		(function () {
+			var btn = document.getElementById('kd-mobile-tree-toggle');
+			if (!btn) return;
+			var isOpen = function () {
+				return document.body.classList.contains('kd-mobile-tree-open');
+			};
+			var close = function () {
+				document.body.classList.remove('kd-mobile-tree-open');
+			};
+			var toggle = function (e) {
+				if (e) { e.preventDefault(); e.stopPropagation(); }
+				document.body.classList.toggle('kd-mobile-tree-open');
+			};
+			btn.addEventListener('click', toggle);
+			// click outside the drawer (on the backdrop area) closes it.
+			// We listen on body and check if the click landed left of the
+			// drawer or to its right (below or above the drawer panel).
+			document.addEventListener('click', function (e) {
+				if (!isOpen()) return;
+				var tree = document.getElementById('tree');
+				if (!tree) return;
+				if (tree.contains(e.target)) return;
+				if (e.target === btn || btn.contains(e.target)) return;
+				// backdrop click — swallow so the grid item / header link
+				// underneath does not also fire.
+				e.preventDefault();
+				e.stopPropagation();
+				close();
+			}, true);
+			// pressing Escape closes the drawer
+			document.addEventListener('keydown', function (e) {
+				if (e.key === 'Escape' && isOpen()) close();
+			});
+			// if the user resizes from mobile to desktop, drop the class
+			// so the desktop tree layout reasserts itself cleanly.
+			var mq = window.matchMedia('(max-width: 760px)');
+			var onChange = function () { if (!mq.matches) close(); };
+			if (mq.addEventListener) mq.addEventListener('change', onChange);
+			else if (mq.addListener) mq.addListener(onChange);
 		})();
 	</script>
 </body>

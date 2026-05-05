@@ -68,12 +68,16 @@ web/browser.css
 web/browser.html
 web/browser.js
 web/browser2.html
+web/deps/chiptune2.js
+web/deps/libopenmpt.js
+web/deps/libopenmpt.js.mem
 web/deps/marked.js
 web/deps/prism.css
 web/deps/prism.js
 web/deps/prismd.css
 web/deps/scp.woff2
 web/iiam.gif
+web/kd-chiptune.js
 web/kd-theme.css
 web/md.css
 web/md.html

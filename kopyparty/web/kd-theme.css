@@ -91,6 +91,12 @@ html[class] {
 
     --font-main: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Share Tech Mono', 'SF Mono', 'Consolas', monospace;
+
+    /* heights of the sticky chrome — used to offset the music widget and
+       to leave breathing room at the bottom of the scroll content. Update
+       both values together with footer/widget paddings. */
+    --kd-footer-h: 39px;
+    --kd-widget-h: 64px;
 }
 
 /* ======================================================================
@@ -161,6 +167,7 @@ body::after {
     top: 0;
     z-index: 2147483646;
     flex-wrap: wrap;
+    flex-shrink: 0;
 }
 
 .kd-header .kd-title {
@@ -261,6 +268,12 @@ body::after {
     box-sizing: border-box;
     flex-shrink: 0;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    /* keep footer pinned to the viewport bottom even when content is taller
+       than the viewport — sticky on a flex-column body works because body
+       is the scroll container (min-height: 100vh + content overflow). */
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
 }
 
 .kd-footer::before {
@@ -721,11 +734,15 @@ html#ht_spl body {
 
 #ht_brw #widget.open {
     display: block !important;
-    position: static !important;
+    /* sticky just above the sticky footer — stays visible while the file
+       grid scrolls behind. The widget is a body flex child placed before
+       the footer in source order, so sticky bottom positions it cleanly
+       above the footer without overlapping. */
+    position: sticky !important;
     left: auto !important;
     right: auto !important;
     top: auto !important;
-    bottom: auto !important;
+    bottom: var(--kd-footer-h) !important;
     width: auto !important;
     height: auto !important;
     /* margin left/right are set dynamically by browser.html's inline script
@@ -740,7 +757,7 @@ html#ht_spl body {
     background: transparent !important;
     box-shadow: none !important;
     flex-shrink: 0 !important;
-    z-index: auto !important;
+    z-index: 4 !important;
     font-size: 1em !important;
 }
 
@@ -1504,10 +1521,23 @@ html#ht_rup #tw th {
 }
 
 /* ======================================================================
+   mobile-only menu button — hidden by default, only shown at <=760px
+   ====================================================================== */
+
+.kd-mobile-only {
+    display: none !important;
+}
+
+/* ======================================================================
    responsive tweaks
    ====================================================================== */
 
 @media (max-width: 760px) {
+    /* tighter footer at narrow widths — keep --kd-footer-h in sync */
+    :root {
+        --kd-footer-h: 33px;
+    }
+
     .kd-header {
         padding: 10px 12px;
         gap: 8px;
@@ -1521,11 +1551,109 @@ html#ht_rup #tw th {
         font-size: 11px;
         padding: 4px 8px;
     }
-    #ht_brw #wrap,
+
+    /* show mobile-only buttons (hamburger) */
+    .kd-mobile-only {
+        display: inline-block !important;
+    }
+
+    .kd-footer {
+        padding: 10px 12px;
+        font-size: 10px;
+    }
+
+    /* keep stray children from breaking the viewport — the file grid
+       sometimes overhangs slightly while reflowing; clip horizontally */
+    body {
+        overflow-x: hidden;
+    }
+
+    /* override JS-set inline `wrap.style.marginLeft: 21em`. With the tree
+       turned into a slide-out drawer, the wrap reclaims the full viewport. */
+    #ht_brw #wrap {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding-left: 0.7em !important;
+        padding-right: 0.7em !important;
+    }
+
     #ht_brw #path,
     #ht_brw #ops,
     #ht_brw .opview.act {
         margin-left: 0.6em;
         margin-right: 0.6em;
+    }
+
+    /* tree → fixed-position slide-out drawer.
+       Hidden by default; .kd-mobile-tree-open on body reveals it. */
+    #ht_brw #tree {
+        display: none !important;
+        position: fixed !important;
+        top: 65px !important; /* clear the sticky kd-header */
+        left: 0 !important;
+        bottom: var(--kd-footer-h) !important;
+        right: auto !important;
+        width: min(85vw, 320px) !important;
+        height: auto !important;
+        max-height: none !important;
+        z-index: 50 !important;
+        box-shadow: 6px 0 30px rgba(0, 0, 0, 0.6);
+        overflow: auto !important;
+    }
+    #ht_brw body.kd-mobile-tree-open #tree {
+        display: block !important;
+    }
+    /* dark backdrop while drawer is open — covers grid, click closes */
+    #ht_brw body.kd-mobile-tree-open::before {
+        content: "";
+        position: fixed;
+        top: 65px;
+        left: min(85vw, 320px);
+        right: 0;
+        bottom: var(--kd-footer-h);
+        background: rgba(0, 0, 0, 0.55);
+        z-index: 49;
+    }
+
+    /* tighter grid at narrow widths so 2-3 columns fit */
+    #ht_brw #ggrid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+    }
+
+    /* the widget's inline-set margins from browser.html's sync routine can
+       push controls outside narrow viewports — clamp to viewport edges */
+    #ht_brw #widget.open {
+        margin-left: 0.6em !important;
+        margin-right: 0.6em !important;
+    }
+
+    /* compact widget controls so the progress bar gets more room */
+    #ht_brw #widgeti {
+        height: 56px !important;
+    }
+    #ht_brw #pctl {
+        top: 8px !important;
+        left: 8px !important;
+    }
+    #ht_brw #pctl a {
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 16px !important;
+        margin: 0 3px 0 0 !important;
+    }
+    /* hide volume slider on mobile — most touch users use the device
+       hardware volume keys, and the volume canvas is too narrow to be
+       useful at small widths anyway */
+    #ht_brw #pvol {
+        display: none !important;
+    }
+    /* progress bar takes the rest of the row */
+    #ht_brw #barbuf,
+    #ht_brw #barpos {
+        height: 22px !important;
+        left: 130px !important;
+        right: 12px !important;
+        width: calc(100% - 142px) !important;
+        border-radius: 11px !important;
     }
 }
