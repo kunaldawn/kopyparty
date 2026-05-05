@@ -876,6 +876,169 @@ html#ht_spl body {
     display: none !important;
 }
 
+/* visualizer toggle inside #pctl — same square neon look as the
+   transport buttons, with a subtle pulse when the panel is open. */
+#ht_brw #pctl a#kd-viz-toggle {
+    margin-left: 8px !important;
+    color: var(--a-hil) !important;
+}
+
+#ht_brw #pctl a#kd-viz-toggle.on {
+    color: #071013 !important;
+    background: var(--a) !important;
+    border-color: var(--a) !important;
+    box-shadow: 0 0 12px rgba(0, 255, 150, 0.55) !important;
+}
+
+/* ======================================================================
+   visualizer slide-up panel
+   ====================================================================== */
+
+#ht_brw #kd-viz-panel {
+    /* Sticky-bottom, pinned just above the music widget so the panel
+       always sits in the same vertical slot regardless of scroll. */
+    position: sticky;
+    bottom: calc(var(--kd-footer-h) + var(--kd-widget-h) + 8px);
+    z-index: 4;
+    margin: 0 1.5em 0;
+    box-sizing: border-box;
+    height: 0;
+    overflow: hidden;
+    background:
+        radial-gradient(70% 80% at 30% 0%, rgba(0, 255, 150, 0.07), transparent 60%),
+        linear-gradient(180deg, #050d12, #02080c);
+    border: 1px solid rgba(0, 255, 150, 0.28);
+    border-radius: 12px;
+    box-shadow:
+        0 12px 36px rgba(0, 0, 0, 0.6),
+        0 0 36px rgba(0, 255, 150, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                margin-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.3s ease;
+    pointer-events: none;
+}
+
+#ht_brw #kd-viz-panel.kd-viz-open {
+    height: 280px;
+    margin-bottom: 8px;
+    pointer-events: auto;
+}
+
+#ht_brw #kd-viz-panel:fullscreen,
+#ht_brw #kd-viz-panel:-webkit-full-screen {
+    height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    bottom: 0 !important;
+}
+
+#ht_brw #kd-viz-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 11px;
+    background: #000;
+}
+
+#ht_brw #kd-viz-panel:fullscreen #kd-viz-canvas,
+#ht_brw #kd-viz-panel:-webkit-full-screen #kd-viz-canvas {
+    border-radius: 0;
+}
+
+#ht_brw #kd-viz-info {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    max-width: calc(100% - 24px);
+    padding: 4px 10px;
+    background: rgba(7, 24, 35, 0.78);
+    border: 1px solid rgba(0, 255, 150, 0.25);
+    border-radius: 6px;
+    color: var(--a);
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    letter-spacing: 0.04em;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.4);
+    pointer-events: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#ht_brw #kd-viz-ctrl {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: flex;
+    gap: 4px;
+    background: rgba(7, 24, 35, 0.55);
+    padding: 4px;
+    border: 1px solid rgba(0, 255, 150, 0.22);
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+#ht_brw #kd-viz-ctrl a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    color: var(--a);
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(0, 255, 150, 0.3);
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.4);
+    font-size: 14px;
+    line-height: 1;
+}
+
+#ht_brw #kd-viz-ctrl a:hover {
+    background: rgba(0, 255, 150, 0.18);
+    border-color: var(--a);
+    color: var(--a-hil);
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.35);
+}
+
+#ht_brw #kd-viz-ctrl a:active {
+    transform: scale(0.96);
+}
+
+@media (max-width: 760px) {
+    #ht_brw #kd-viz-panel {
+        margin: 0 0.6em 0;
+        bottom: calc(var(--kd-footer-h) + 88px + 8px); /* mobile widget = 88px */
+    }
+    #ht_brw #kd-viz-panel.kd-viz-open {
+        height: 200px;
+    }
+    #ht_brw #kd-viz-info {
+        font-size: 0.7em;
+        padding: 3px 8px;
+        top: 8px;
+        left: 8px;
+    }
+    #ht_brw #kd-viz-ctrl {
+        bottom: 8px;
+        right: 8px;
+        gap: 3px;
+        padding: 3px;
+    }
+    #ht_brw #kd-viz-ctrl a {
+        width: 26px;
+        height: 26px;
+        font-size: 12px;
+    }
+    #ht_brw #pctl a#kd-viz-toggle {
+        margin-left: 6px !important;
+    }
+}
+
 /* ======================================================================
    document viewer (opens when clicking a .txt / .md file)
    #hdoc is the toolbar; .mdo is the rendered markdown body (lives in iframe too)

@@ -68,6 +68,8 @@ web/browser.css
 web/browser.html
 web/browser.js
 web/browser2.html
+web/deps/butterchurn.min.js
+web/deps/butterchurnPresets.min.js
 web/deps/chiptune2.js
 web/deps/libopenmpt.js
 web/deps/libopenmpt.js.mem
@@ -79,6 +81,7 @@ web/deps/scp.woff2
 web/iiam.gif
 web/kd-chiptune.js
 web/kd-theme.css
+web/kd-visualizer.js
 web/md.css
 web/md.html
 web/md.js

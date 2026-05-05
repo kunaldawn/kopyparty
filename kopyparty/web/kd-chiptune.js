@@ -69,11 +69,25 @@
         return lib_loading;
     }
 
-    // singleton ChiptuneJsPlayer (one Web Audio context for everything)
+    // Shared AudioContext used by both chiptune2 and the mp.au
+    // MediaElementSource wrap (which the visualizer taps off). Keeping a
+    // single context is what lets the visualizer connect to either
+    // playback path without juggling separate graphs.
+    function getKdAudioCtx() {
+        if (!window.kdAudio) window.kdAudio = {};
+        if (window.kdAudio.context) return window.kdAudio.context;
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        try { window.kdAudio.context = new AC(); }
+        catch (e) { return null; }
+        return window.kdAudio.context;
+    }
+
+    // singleton ChiptuneJsPlayer pinned to the shared context above.
     var cplayer = null;
     function getPlayer() {
         if (!cplayer) {
-            var cfg = new ChiptuneJsConfig(0 /*repeat*/, 50 /*stereoSep*/, 2 /*interp*/, null);
+            var cfg = new ChiptuneJsConfig(0 /*repeat*/, 50 /*stereoSep*/, 2 /*interp*/, getKdAudioCtx());
             cplayer = new ChiptuneJsPlayer(cfg);
         }
         return cplayer;
@@ -209,6 +223,11 @@
                 // kick off an offline waveform render so the progress bar
                 // gets the same translucent waveform overlay as mp3 files
                 generateChiptuneWaveform(url, buffer, self._duration);
+                // every chiptune2 play creates a fresh ScriptProcessor —
+                // the visualizer's connectAudio reference is now stale
+                if (window.kdVisualizer && window.kdVisualizer.onAudioChanged) {
+                    window.kdVisualizer.onAudioChanged();
+                }
             });
         }
     });
@@ -448,10 +467,66 @@
         setTimeout(function () { tryInstall(retries + 1); }, 100);
     }
 
+    // ----- Wrap mp.au with a MediaElementSource so the visualizer can tap
+    // ----- the audio output. Done by patching mp.set_ev (which copyparty
+    // ----- calls right after creating a fresh Audio() element, before
+    // ----- any src is assigned).
+    function patchMpSetEv() {
+        if (typeof window.mp !== 'object' || typeof mp.set_ev !== 'function') return false;
+        if (mp._kdSetEvPatched) return true;
+        var orig = mp.set_ev;
+        mp.set_ev = function () {
+            orig.call(this);
+            wrapAuForVisualizer();
+        };
+        mp._kdSetEvPatched = true;
+        return true;
+    }
+
+    function wrapAuForVisualizer() {
+        var au = window.mp && window.mp.au;
+        if (!au) return;
+        if (au instanceof ChiptuneAudio) return;     // chiptune2's ScriptProcessor is the visualizer source
+        if (au._kdWrapped) {                         // already wrapped — just re-notify
+            if (window.kdVisualizer && window.kdVisualizer.onAudioChanged) {
+                window.kdVisualizer.onAudioChanged();
+            }
+            return;
+        }
+        var ctx = getKdAudioCtx();
+        if (!ctx) return;
+        try {
+            // Resume the context if the browser put it in suspended state
+            // (autoplay policy) — we got here off a user gesture, so this
+            // tends to succeed.
+            if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+                ctx.resume().catch(function () {});
+            }
+            au._kdSource = ctx.createMediaElementSource(au);
+            au._kdSource.connect(ctx.destination);
+            au._kdWrapped = true;
+            if (window.kdVisualizer && window.kdVisualizer.onAudioChanged) {
+                window.kdVisualizer.onAudioChanged();
+            }
+        } catch (e) {
+            console.warn('kd MediaElementSource wrap failed:', e && e.message || e);
+        }
+    }
+
+    function tryPatchMpSetEv(retries) {
+        if (patchMpSetEv()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryPatchMpSetEv(retries + 1); }, 100);
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { tryInstall(0); });
+        document.addEventListener('DOMContentLoaded', function () {
+            tryInstall(0);
+            tryPatchMpSetEv(0);
+        });
     } else {
         tryInstall(0);
+        tryPatchMpSetEv(0);
     }
 
     // Expose a few helpers for debugging from the console.

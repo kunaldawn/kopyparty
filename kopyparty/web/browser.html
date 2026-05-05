@@ -167,6 +167,7 @@
 	<script src="{{ r }}/.kpr/w/browser.js?_={{ ts }}"></script>
 	<script src="{{ r }}/.kpr/w/up2k.js?_={{ ts }}"></script>
 	<script src="{{ r }}/.kpr/w/kd-chiptune.js?_={{ ts }}"></script>
+	<script src="{{ r }}/.kpr/w/kd-visualizer.js?_={{ ts }}"></script>
 	{%- if js %}
 	<script src="{{ js }}_={{ ts }}"></script>
 	{%- endif %}
@@ -215,11 +216,12 @@
 			}, 100);
 		})();
 
-		// Align the audio-player widget's left/right edges with `#ggrid`
-		// (the file-grid container) so the player visually matches the
-		// grid's leading edge regardless of tree-sidebar state. We measure
-		// #ggrid's actual screen rect and translate that to widget margins.
-		// On mobile the kd-theme @media block clamps these via !important.
+		// Align the audio-player widget's (and visualizer panel's) left/
+		// right edges with `#ggrid` (the file-grid container) so the
+		// player visually matches the grid's leading edge regardless of
+		// tree-sidebar state. We measure #ggrid's actual screen rect and
+		// translate that to widget + panel margins. On mobile the
+		// kd-theme @media block clamps these via !important.
 		(function () {
 			var sync = function () {
 				var ggrid = document.getElementById('ggrid');
@@ -227,8 +229,15 @@
 				if (!ggrid || !widget) return;
 				var gr = ggrid.getBoundingClientRect();
 				var vw = document.documentElement.clientWidth;
-				widget.style.marginLeft = Math.max(0, gr.left) + 'px';
-				widget.style.marginRight = Math.max(0, vw - gr.right) + 'px';
+				var ml = Math.max(0, gr.left) + 'px';
+				var mr = Math.max(0, vw - gr.right) + 'px';
+				widget.style.marginLeft = ml;
+				widget.style.marginRight = mr;
+				var vpanel = document.getElementById('kd-viz-panel');
+				if (vpanel) {
+					vpanel.style.marginLeft = ml;
+					vpanel.style.marginRight = mr;
+				}
 			};
 			var attach = function () {
 				var wrap = document.getElementById('wrap');
