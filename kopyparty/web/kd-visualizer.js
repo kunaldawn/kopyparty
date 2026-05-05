@@ -281,8 +281,11 @@
         var btn = document.createElement('a');
         btn.id = 'kd-viz-toggle';
         btn.href = '#';
-        btn.title = 'visualizer';
-        btn.innerHTML = SVG_VIZ;
+        btn.title = 'open visualizer';
+        // SVG icon + visible "visualizer" label so the tab reads as a
+        // clear interactive control instead of an unrecognisable chip.
+        btn.innerHTML = '<span class="kd-viz-toggle-icon">' + SVG_VIZ + '</span>'
+            + '<span class="kd-viz-toggle-label">visualizer</span>';
         btn.addEventListener('click', function (e) {
             e.preventDefault();
             togglePanel();

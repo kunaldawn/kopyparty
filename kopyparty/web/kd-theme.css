@@ -876,44 +876,66 @@ html#ht_spl body {
     display: none !important;
 }
 
-/* visualizer toggle — anchored to the widget as a tab sticking out
-   above the top-right corner. Lives in dead space above the widget
-   chrome so it doesn't push or overlap the progress bar / volume.
-   When the panel is open the tab hides — the close button inside the
-   panel takes over the dismiss action. */
+/* visualizer toggle — a clearly-labelled tab anchored to the top
+   center of the widget, sticking out above the widget chrome. Lives
+   in dead space (no overlap with the progress bar or volume canvas)
+   and reads obviously as a button. When the panel is open the tab
+   hides; the panel's own close button (▼) handles dismissing. */
 #ht_brw #widget a#kd-viz-toggle {
     position: absolute;
-    top: -18px;
-    right: 12px;
-    width: 44px;
-    height: 22px;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 24px;
+    padding: 0 14px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--a);
-    background: linear-gradient(180deg, rgba(7, 24, 35, 0.97), rgba(3, 16, 24, 0.99));
-    border: 1px solid rgba(0, 255, 150, 0.32);
+    gap: 7px;
+    color: #071013;
+    background: linear-gradient(180deg, var(--a) 0%, var(--a-dark) 100%);
+    border: 1px solid var(--a);
     border-bottom: none;
-    border-radius: 7px 7px 0 0;
+    border-radius: 12px 12px 0 0;
     text-decoration: none;
-    font-size: 13px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
     line-height: 1;
-    text-shadow: 0 0 6px rgba(0, 255, 150, 0.5);
     box-shadow:
-        0 -2px 8px rgba(0, 0, 0, 0.45),
-        0 0 14px rgba(0, 255, 150, 0.12);
+        0 -3px 10px rgba(0, 0, 0, 0.5),
+        0 -1px 0 rgba(255, 255, 255, 0.2) inset,
+        0 0 18px rgba(0, 255, 150, 0.4);
     transition: color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
-    z-index: 5;
+    z-index: 50;
+    white-space: nowrap;
+}
+
+#ht_brw #widget a#kd-viz-toggle .kd-viz-toggle-icon {
+    display: inline-flex;
+    width: 14px;
+    height: 14px;
+    color: #071013;
+}
+
+#ht_brw #widget a#kd-viz-toggle .kd-viz-toggle-label {
+    display: inline-block;
 }
 
 #ht_brw #widget a#kd-viz-toggle:hover {
-    color: var(--a-hil);
-    background: linear-gradient(180deg, rgba(0, 255, 150, 0.22), rgba(0, 255, 150, 0.08));
-    border-color: var(--a);
+    color: #071013;
+    background: linear-gradient(180deg, var(--a-hil) 0%, var(--a) 100%);
+    transform: translateX(-50%) translateY(-3px);
     box-shadow:
-        0 -2px 10px rgba(0, 0, 0, 0.5),
-        0 0 18px rgba(0, 255, 150, 0.35);
-    transform: translateY(-2px);
+        0 -3px 12px rgba(0, 0, 0, 0.55),
+        0 -1px 0 rgba(255, 255, 255, 0.25) inset,
+        0 0 24px rgba(0, 255, 150, 0.6);
+}
+
+#ht_brw #widget a#kd-viz-toggle:active {
+    transform: translateX(-50%) translateY(-1px);
 }
 
 #ht_brw #widget a#kd-viz-toggle.on {
@@ -924,12 +946,17 @@ html#ht_spl body {
 
 @media (max-width: 760px) {
     #ht_brw #widget a#kd-viz-toggle {
-        top: -16px;
-        right: 10px;
-        width: 40px;
-        height: 18px;
-        font-size: 11px;
-        border-radius: 6px 6px 0 0;
+        top: -20px;
+        height: 22px;
+        padding: 0 11px;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        gap: 5px;
+        border-radius: 11px 11px 0 0;
+    }
+    #ht_brw #widget a#kd-viz-toggle .kd-viz-toggle-icon {
+        width: 12px;
+        height: 12px;
     }
 }
 
