@@ -13,16 +13,16 @@ pyproject.toml and scripts/make-pypi-release.sh
 are in charge of packaging wheels now
 """
 
-NAME = "copyparty"
+NAME = "kopyparty"
 VERSION = None
-data_files = [("share/doc/copyparty", ["README.md", "LICENSE"])]
+data_files = [("share/doc/kopyparty", ["README.md", "LICENSE"])]
 manifest = ""
 for dontcare, files in data_files:
     for fn in files:
         manifest += "include {0}\n".format(fn)
 
-manifest += "recursive-include copyparty/res *\n"
-manifest += "recursive-include copyparty/web *\n"
+manifest += "recursive-include kopyparty/res *\n"
+manifest += "recursive-include kopyparty/web *\n"
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -60,7 +60,7 @@ class clean2(Command):
             pass
 
         try:
-            rmtree("./copyparty.egg-info")
+            rmtree("./kopyparty.egg-info")
         except:
             pass
 
@@ -125,16 +125,13 @@ args = {
     "include_package_data": True,
     "data_files": data_files,
     "packages": [
-        "copyparty",
-        "copyparty.bos",
-        "copyparty.res",
-        "copyparty.stolen",
-        "copyparty.stolen.dnslib",
-        "copyparty.stolen.ifaddr",
-        "copyparty.web",
-        "copyparty.web.tl",
-        "copyparty.web.a",
-        "copyparty.web.deps",
+        "kopyparty",
+        "kopyparty.bos",
+        "kopyparty.res",
+        "kopyparty.stolen",
+        "kopyparty.stolen.ifaddr",
+        "kopyparty.web",
+        "kopyparty.web.deps",
     ],
     "install_requires": ["jinja2"],
     "extras_require": {
@@ -149,8 +146,7 @@ args = {
         "pwhash": ["argon2-cffi"],
         "zeromq": ["pyzmq"],
     },
-    "entry_points": {"console_scripts": ["copyparty = copyparty.__main__:main"]},
-    "scripts": ["bin/partyfuse.py", "bin/u2c.py"],
+    "entry_points": {"console_scripts": ["kopyparty = kopyparty.__main__:main"]},
     "cmdclass": {"clean2": clean2},
 }
 

@@ -1,1 +1,0 @@
-../../../bin/partyfuse.py

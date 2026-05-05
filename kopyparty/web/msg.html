@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" id="ht_msg">
+
+<head>
+	<meta charset="utf-8">
+	<title>{{ s_doctitle }}</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=0.8">
+	<meta name="theme-color" content="#{{ tcolor }}">
+<link rel="stylesheet" href="{{ r }}/.kpr/w/kd-theme.css?_={{ ts }}">
+<style>:root{--font-main:'Inter',sans-serif;--font-mono:'Share Tech Mono',monospace}
+html,body,a{margin:0;padding:0;border:none;font-family:var(--font-main),sans-serif}
+pre{font-family:var(--font-mono),monospace}
+html{touch-action:manipulation;background:#071013;color:#cfeee0}
+body{padding:2em}
+#box{padding:1em 1.4em;background:linear-gradient(180deg,rgba(7,24,35,0.9),rgba(3,16,24,0.95));border:1px solid rgba(0,255,150,0.2);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.4),0 0 30px rgba(0,255,150,0.05);max-width:48em;margin:1em auto}
+#box h1{color:#00ff99;font-family:var(--font-mono),monospace;text-shadow:0 0 8px rgba(0,255,150,0.35);text-transform:uppercase;letter-spacing:0.08em}
+#box h2{color:#7fffc1;font-family:var(--font-mono),monospace}
+#box pre{color:#00ff99;background:rgba(0,0,0,0.45);border:1px solid rgba(0,255,150,0.18);border-radius:4px;padding:.6em .9em}
+a{color:#00ff99}</style>
+{{ html_head }}
+</head>
+
+<body>
+	<div id="box">
+
+		{%- if h1 %}
+		<h1>{{ h1 }}</h1>
+		{%- endif %}
+
+		{%- if h2 %}
+		<h2>{{ h2 }}</h2>
+		{%- endif %}
+
+		{%- if p %}
+		<p>{{ p }}</p>
+		{%- endif %}
+
+		{%- if pre %}
+		<pre>{{ pre }}</pre>
+		{%- endif %}
+
+		{%- if html %}
+		{{ html }}
+		{%- endif %}
+
+		{%- if click %}
+		<script>document.getElementsByTagName("a")[0].click()</script>
+		{%- endif %}
+	</div>
+
+	{%- if redir %}
+	<script>
+		setTimeout(function() {
+			location.replace("{{ redir }}");
+		}, 800);
+	</script>
+	{%- endif %}
+	{%- if js %}
+	<script src="{{ js }}_={{ ts }}"></script>
+	{%- endif %}
+</body>
+
+</html>
+

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" id="ht_svc">
+
+<head>
+	<meta charset="utf-8">
+	<title>{{ s_doctitle }}</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=0.8">
+	<meta name="theme-color" content="#{{ tcolor }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.kpr/w/splash.css?_={{ ts }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.kpr/w/ui.css?_={{ ts }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.kpr/w/kd-theme.css?_={{ ts }}">
+{{ html_head }}
+</head>
+
+<body>
+	<header class="kd-header">
+		<div class="kd-title"><h1>{{ args.kd_header|e }}</h1></div>
+		<nav class="kd-nav">
+			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
+		</nav>
+	</header>
+	<div id="wrap" class="w">
+		<div class="cn">
+			<p class="btns"><a href="/{{ rvp }}">browse files</a> &nbsp; // &nbsp; <a href="{{ r }}/?h">control panel</a></p>
+		</div>
+		<p class="sph">
+			this archive is read-only and only exposed over HTTP via the web browser.
+		</p>
+	</div>
+	<footer class="kd-footer">
+		{{ args.kd_footer|e }}
+	</footer>
+</body>
+
+</html>

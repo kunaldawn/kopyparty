@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" id="ht_spl">
+
+<head>
+	<meta charset="utf-8">
+	<title>{{ s_doctitle }}</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=0.8">
+	<meta name="theme-color" content="#071013">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.kpr/w/splash.css?_={{ ts }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.kpr/w/ui.css?_={{ ts }}">
+	<link rel="stylesheet" media="screen" href="{{ r }}/.kpr/w/kd-theme.css?_={{ ts }}">
+{{ html_head }}
+</head>
+
+<body>
+	<header class="kd-header">
+		<div class="kd-title"><h1>{{ this.args.kd_header|e }}</h1></div>
+		<nav class="kd-nav">
+			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
+		</nav>
+	</header>
+
+	<div id="wrap">
+		{%- if msg %}
+		<div id="msg">
+			{{ msg }}
+		</div>
+		{%- endif %}
+
+		{%- if ups %}
+		<h1 id="aa">incoming files:</h1>
+			<table class="vols">
+				<thead><tr><th>%</th><th>speed</th><th>eta</th><th>idle</th><th>dir</th><th>file</th></tr></thead>
+				<tbody>
+					{%- for u in ups %}
+					<tr><td>{{ u[0] }}</td><td>{{ u[1] }}</td><td>{{ u[2] }}</td><td>{{ u[3] }}</td><td><a href="{{ r }}{{ u[4] }}">{{ u[5]|e }}</a></td><td>{{ u[6]|e }}</td></tr>
+					{%- endfor %}
+				</tbody>
+			</table>
+		{%- endif %}
+
+		{%- if dls %}
+		<h1 id="ae">active downloads:</h1>
+			<table class="vols">
+				<thead><tr><th>%</th><th>sent</th><th>speed</th><th>eta</th><th>idle</th><th></th><th>dir</th><th>file</th></tr></thead>
+				<tbody>
+					{%- for u in dls %}
+					<tr><td>{{ u[0] }}</td><td>{{ u[1] }}</td><td>{{ u[2] }}</td><td>{{ u[3] }}</td><td>{{ u[4] }}</td><td>{{ u[5] }}</td><td><a href="{{ r }}{{ u[6] }}">{{ u[7]|e }}</a></td><td>{{ u[8] }}</td></tr>
+					{%- endfor %}
+				</tbody>
+			</table>
+		{%- endif %}
+
+		{%- if rvol %}
+		<h1 id="f">you can browse:</h1>
+		<ul>
+			{%- for mp in rvol %}
+			<li><a href="{{ r }}{{ mp }}{{ url_suf }}">{{ mp }}</a></li>
+			{%- endfor %}
+		</ul>
+		{%- endif %}
+
+		<h1 id="cc">other stuff:</h1>
+		<div class="agr">
+			<a id="af" href="{{ r }}/?ru">show recent uploads</a><br />
+			<a id="k" href="{{ r }}/?reset" class="r" onclick="localStorage.clear();return true">reset client settings</a><br />
+		</div>
+		<ul>
+			{%- if k304 or k304vis %}
+			{%- if k304 %}
+			<li><a id="h" href="{{ r }}/?cc&setck=k304=n">disable k304</a> (currently enabled)
+			{%- else %}
+			<li><a id="i" href="{{ r }}/?cc&setck=k304=y" class="r">enable k304</a> (currently disabled)
+			{%- endif %}
+			<blockquote id="j">enabling k304 will disconnect your client on every HTTP 304, which can prevent some buggy proxies from getting stuck (suddenly not loading pages), <em>but</em> it will also make things slower in general</blockquote></li>
+			{%- endif %}
+
+			{%- if no304 or no304vis %}
+			{%- if no304 %}
+			<li><a id="ab" href="{{ r }}/?cc&setck=no304=n">disable no304</a> (currently enabled)
+			{%- else %}
+			<li><a id="ac" href="{{ r }}/?cc&setck=no304=y" class="r">enable no304</a> (currently disabled)
+			{%- endif %}
+			<blockquote id="ad">enabling no304 will disable all caching; try this if k304 wasn't enough. This will waste a huge amount of network traffic!</blockquote></li>
+			{%- endif %}
+		</ul>
+
+	</div>
+	<a href="#" id="repl">π</a>
+
+	<footer class="kd-footer">
+		{{ this.args.kd_footer|e }}
+	</footer>
+
+	<script>
+
+var SR="{{ r }}",
+	lang="{{ lang }}",
+	dfavico="{{ favico }}";
+
+var STG = window.localStorage;
+document.documentElement.className = (STG && STG.cpp_thm) || "{{ this.args.theme }}";
+
+</script>
+<script src="{{ r }}/.kpr/w/util.js?_={{ ts }}"></script>
+{%- if lang != "eng" %}
+<script src="{{ r }}/.kpr/w/tl/{{ lang }}.js?_={{ ts }}"></script>
+{%- endif %}
+<script src="{{ r }}/.kpr/w/splash.js?_={{ ts }}"></script>
+{%- if js %}
+<script src="{{ js }}_={{ ts }}"></script>
+{%- endif %}
+<script>
+	Date.now();function jsldp(a,b){2!=window[a]&&alert("FATAL ERROR: cannot load "+b+".js due to unreliable network or broken reverse-proxy; try CTRL-SHIFT-R")}
+	jsldp("J_UTL","util");
+	jsldp("J_SPL","splash");
+</script>
+</body>
+</html>

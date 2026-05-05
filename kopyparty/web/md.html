@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en" id="ht_md">
+
+<head>
+	<meta charset="utf-8">
+	<title>📝 {{ title }}</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=0.7">
+	<meta name="theme-color" content="#{{ tcolor }}">
+	<link rel="stylesheet" href="{{ r }}/.kpr/w/ui.css?_={{ ts }}">
+	<link rel="stylesheet" href="{{ r }}/.kpr/w/md.css?_={{ ts }}">
+	<link rel="stylesheet" href="{{ r }}/.kpr/w/kd-theme.css?_={{ ts }}">
+{{ html_head }}
+</head>
+
+<body>
+	<header class="kd-header">
+		<div class="kd-title"><h1>{{ this.args.kd_header|e }}</h1></div>
+		<nav class="kd-nav">
+			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
+		</nav>
+	</header>
+	<div id="mn"></div>
+	<div id="mh">
+		<a href="{{ arg_base }}">view raw</a>
+		<a id="lightswitch" href="#" hidden>go dark</a>
+		<a id="navtoggle" href="#" hidden>hide nav</a>
+	</div>
+	<div id="toc"></div>
+	<div id="mtw">
+		<textarea id="mt" autocomplete="off">{{ md }}</textarea>
+	</div>
+	<div id="mw">
+		<div id="ml">
+			<div style="text-align:center;margin:5em 0">
+				<div style="font-size:2em;margin:1em 0">Loading</div>
+				if you're still reading this, check that javascript is allowed
+			</div>
+		</div>
+		<div id="mp" class="mdo"></div>
+	</div>
+	<a href="#" id="repl">π</a>
+	<footer class="kd-footer">
+		{{ this.args.kd_footer|e }}
+	</footer>
+
+	<script>
+
+var SR = "{{ r }}",
+	last_modified = {{ lastmod }},
+	have_emp = {{ have_emp }},
+	md_no_br = {{ md_no_br }},
+	dfavico = "{{ favico }}";
+
+var md_opt = {
+	link_md_as_html: false,
+	modpoll_freq: {{ md_chk_rate }}
+};
+
+(function () {
+	var l = window.localStorage,
+		drk = (l && l.light) != 1,
+		btn = document.getElementById("lightswitch"),
+		f = function (e) {
+if (e) { e.preventDefault(); drk = !drk; }
+document.documentElement.className = drk? "z":"y";
+btn.innerHTML = "go " + (drk ? "light":"dark");
+try { l.light = drk? 0:1; } catch (ex) { }
+		};
+	btn.onclick = f;
+	f();
+})();
+
+	</script>
+	<script src="{{ r }}/.kpr/w/util.js?_={{ ts }}"></script>
+	<script src="{{ r }}/.kpr/w/deps/marked.js?_={{ ts }}"></script>
+	<script src="{{ r }}/.kpr/w/md.js?_={{ ts }}"></script>
+	<script>
+		Date.now();function jsldp(a,b){2!=window[a]&&alert("FATAL ERROR: cannot load "+b+".js due to unreliable network or broken reverse-proxy; try CTRL-SHIFT-R")}
+		jsldp("J_UTL","util");
+		jsldp("J_MD","md");
+	</script>
+	{%- if js %}
+	<script src="{{ js }}_={{ ts }}"></script>
+	{%- endif %}
+</body>
+</html>
+
