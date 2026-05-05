@@ -269,11 +269,14 @@
         else btn.classList.remove('on');
     }
 
-    // Add the 🎨 toggle into #pctl. Run after browser.js has built the
-    // widget (mp object exists).
+    // Add the 🎨 toggle as a tab anchored to the top-right corner of
+    // the widget. Putting it inside #pctl would push the progress bar
+    // (desktop) and overlap the volume canvas (mobile) since pctl
+    // auto-sizes to its content. As a tab it sits in dead space above
+    // the widget and stays out of the player chrome.
     function installToggleButton() {
-        var pctl = document.getElementById('pctl');
-        if (!pctl) return false;
+        var widget = document.getElementById('widget');
+        if (!widget) return false;
         if (document.getElementById('kd-viz-toggle')) return true;
         var btn = document.createElement('a');
         btn.id = 'kd-viz-toggle';
@@ -284,7 +287,7 @@
             e.preventDefault();
             togglePanel();
         });
-        pctl.appendChild(btn);
+        widget.appendChild(btn);
         return true;
     }
 

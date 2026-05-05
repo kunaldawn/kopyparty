@@ -876,18 +876,61 @@ html#ht_spl body {
     display: none !important;
 }
 
-/* visualizer toggle inside #pctl — same square neon look as the
-   transport buttons, with a subtle pulse when the panel is open. */
-#ht_brw #pctl a#kd-viz-toggle {
-    margin-left: 8px !important;
-    color: var(--a-hil) !important;
+/* visualizer toggle — anchored to the widget as a tab sticking out
+   above the top-right corner. Lives in dead space above the widget
+   chrome so it doesn't push or overlap the progress bar / volume.
+   When the panel is open the tab hides — the close button inside the
+   panel takes over the dismiss action. */
+#ht_brw #widget a#kd-viz-toggle {
+    position: absolute;
+    top: -18px;
+    right: 12px;
+    width: 44px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--a);
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.97), rgba(3, 16, 24, 0.99));
+    border: 1px solid rgba(0, 255, 150, 0.32);
+    border-bottom: none;
+    border-radius: 7px 7px 0 0;
+    text-decoration: none;
+    font-size: 13px;
+    line-height: 1;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.5);
+    box-shadow:
+        0 -2px 8px rgba(0, 0, 0, 0.45),
+        0 0 14px rgba(0, 255, 150, 0.12);
+    transition: color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
+    z-index: 5;
 }
 
-#ht_brw #pctl a#kd-viz-toggle.on {
-    color: #071013 !important;
-    background: var(--a) !important;
-    border-color: var(--a) !important;
-    box-shadow: 0 0 12px rgba(0, 255, 150, 0.55) !important;
+#ht_brw #widget a#kd-viz-toggle:hover {
+    color: var(--a-hil);
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.22), rgba(0, 255, 150, 0.08));
+    border-color: var(--a);
+    box-shadow:
+        0 -2px 10px rgba(0, 0, 0, 0.5),
+        0 0 18px rgba(0, 255, 150, 0.35);
+    transform: translateY(-2px);
+}
+
+#ht_brw #widget a#kd-viz-toggle.on {
+    /* hidden when the panel is open — its close button is the dismiss
+       action, no need for a redundant control */
+    display: none;
+}
+
+@media (max-width: 760px) {
+    #ht_brw #widget a#kd-viz-toggle {
+        top: -16px;
+        right: 10px;
+        width: 40px;
+        height: 18px;
+        font-size: 11px;
+        border-radius: 6px 6px 0 0;
+    }
 }
 
 /* ======================================================================
@@ -1033,9 +1076,6 @@ html#ht_spl body {
         width: 26px;
         height: 26px;
         font-size: 12px;
-    }
-    #ht_brw #pctl a#kd-viz-toggle {
-        margin-left: 6px !important;
     }
 }
 
