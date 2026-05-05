@@ -229,6 +229,7 @@
 				if (!ggrid || !widget) return;
 				var gr = ggrid.getBoundingClientRect();
 				var vw = document.documentElement.clientWidth;
+				if (gr.right <= 0 || vw <= 0) return;     // not laid out yet
 				var ml = Math.max(0, gr.left) + 'px';
 				var mr = Math.max(0, vw - gr.right) + 'px';
 				widget.style.marginLeft = ml;
@@ -242,11 +243,26 @@
 			var attach = function () {
 				var wrap = document.getElementById('wrap');
 				var ggrid = document.getElementById('ggrid');
-				if (!wrap || !ggrid) return false;
+				var widget = document.getElementById('widget');
+				if (!wrap || !ggrid || !widget) return false;
 				sync();
+				// re-sync when:
+				//   1. wrap inline style changes (treectl opens/closes the sidebar),
+				//   2. widget classList changes (.open toggles or copyparty
+				//      re-runs widget.set after an autoplay-blocked retry),
+				//   3. widget inline style changes (some external code
+				//      reset margins).
 				new MutationObserver(sync).observe(wrap,
 					{ attributes: true, attributeFilter: ['style'] });
+				new MutationObserver(sync).observe(widget,
+					{ attributes: true, attributeFilter: ['class', 'style'] });
 				window.addEventListener('resize', sync);
+				window.addEventListener('load', sync);
+				// belt-and-braces: re-run the sync at a few delay checkpoints
+				// so a slow first paint still ends up with the right margins.
+				setTimeout(sync, 100);
+				setTimeout(sync, 500);
+				setTimeout(sync, 1500);
 				return true;
 			};
 			if (attach()) return;

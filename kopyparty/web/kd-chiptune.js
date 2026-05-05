@@ -73,14 +73,38 @@
     // MediaElementSource wrap (which the visualizer taps off). Keeping a
     // single context is what lets the visualizer connect to either
     // playback path without juggling separate graphs.
+    //
+    // Browsers will auto-suspend an AudioContext under various
+    // conditions (idle, tab hidden, autoplay policy violation). When
+    // suspended, a chiptune2 ScriptProcessor stops being asked for
+    // samples and audio just dies until the user clicks somewhere.
+    // Auto-resume on every statechange and on user gestures keeps a
+    // chiptune playing across tab focus / idle transitions.
     function getKdAudioCtx() {
         if (!window.kdAudio) window.kdAudio = {};
         if (window.kdAudio.context) return window.kdAudio.context;
         var AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;
-        try { window.kdAudio.context = new AC(); }
+        var ctx;
+        try { ctx = window.kdAudio.context = new AC(); }
         catch (e) { return null; }
-        return window.kdAudio.context;
+        var tryResume = function () {
+            if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+                ctx.resume().catch(function () {});
+            }
+        };
+        try { ctx.addEventListener('statechange', tryResume); } catch (e) {}
+        // any user gesture is a chance to lift autoplay restrictions
+        var resumeOpts = { capture: true, passive: true };
+        var onGesture = function () { tryResume(); };
+        document.addEventListener('click', onGesture, resumeOpts);
+        document.addEventListener('touchstart', onGesture, resumeOpts);
+        document.addEventListener('keydown', onGesture, resumeOpts);
+        // also nudge it when the tab regains focus
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) tryResume();
+        });
+        return ctx;
     }
 
     // singleton ChiptuneJsPlayer pinned to the shared context above.
