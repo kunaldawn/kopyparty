@@ -557,24 +557,75 @@ html#ht_spl body {
 /* left tree sidebar */
 #ht_brw #tree {
     background: var(--tree-bg);
-    border-right: 1px solid rgba(0, 255, 150, 0.15);
+    border-right: 1px solid rgba(0, 255, 150, 0.18);
     box-shadow:
         inset -1px 0 0 rgba(0, 255, 150, 0.05),
         2px 0 14px rgba(0, 0, 0, 0.4);
+    font-family: var(--font-mono) !important;
 }
 
-#ht_brw #treeh {
-    background: linear-gradient(180deg, rgba(0, 255, 150, 0.08), rgba(0, 255, 150, 0.02));
-    border-bottom: 1px solid rgba(0, 255, 150, 0.15);
+#ht_brw #treeh,
+#ht_brw #treepar {
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.08), rgba(0, 255, 150, 0.02)) !important;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.18) !important;
 }
 
 #ht_brw #tree a {
     color: var(--fg-weak);
+    text-shadow: none;
 }
 
 #ht_brw #tree a:hover {
     color: var(--a);
-    background: rgba(0, 255, 150, 0.08);
+    background: rgba(0, 255, 150, 0.1);
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3);
+}
+
+/* tree control buttons (in #treepar at top of sidebar) — uniform theme */
+#ht_brw #treepar .btn,
+#ht_brw #treepar a.btn,
+#ht_brw #treeh .btn {
+    color: var(--a) !important;
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(0, 255, 150, 0.3) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.3) !important;
+    margin: 2px !important;
+    padding: 0.15em 0.4em !important;
+    font-size: 0.95em !important;
+}
+
+#ht_brw #treepar .btn:hover,
+#ht_brw #treepar a.btn:hover,
+#ht_brw #treeh .btn:hover {
+    color: var(--a-hil) !important;
+    background: rgba(0, 255, 150, 0.18) !important;
+    border-color: var(--a) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.3) !important;
+}
+
+#ht_brw #treepar .tgl.btn.on,
+#ht_brw #treeh .tgl.btn.on {
+    color: #071013 !important;
+    background: var(--a) !important;
+    border-color: var(--a) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.4) !important;
+}
+
+/* current folder in tree (highlighted) */
+#ht_brw #tree a.hl,
+#ht_brw #tree li.act > a + a {
+    color: #071013 !important;
+    background: var(--a) !important;
+    text-shadow: none;
+    box-shadow: 0 0 8px rgba(0, 255, 150, 0.35);
+}
+
+/* breadcrumb 🌲 (open tree) — match other inline path links */
+#ht_brw #path #entree {
+    color: var(--a) !important;
+    text-shadow: 0 0 8px rgba(0, 255, 150, 0.45) !important;
 }
 
 /* "control-panel | prev / up / next" footer-links — style as breadcrumb */
@@ -623,10 +674,6 @@ html#ht_spl body {
    ====================================================================== */
 
 #ht_brw #ops,
-#ht_brw #tree,
-#ht_brw #detree,
-#ht_brw #treeh,
-#ht_brw #path #entree,
 #ht_brw #wtoggle,
 #ht_brw #srv_info,
 #ht_brw #srv_info2,
@@ -1069,10 +1116,10 @@ html#ht_md #mn a:hover {
     margin-left: 0 !important;
 }
 
-/* since the sidebar is gone, reclaim that space for the main wrap.
-   also mirror the top gap (1em between header and breadcrumb) below the wrap */
+/* mirror the top gap (1em between header and breadcrumb) below the wrap.
+   margin-left is intentionally not set so copyparty's JS can shift the wrap
+   right when the tree sidebar opens (it sets style.marginLeft inline). */
 #ht_brw #wrap {
-    margin-left: 1.5em !important;
     margin-bottom: 1em !important;
 }
 
