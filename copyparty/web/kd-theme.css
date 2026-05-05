@@ -628,20 +628,31 @@ html#ht_spl body {
     text-shadow: 0 0 8px rgba(0, 255, 150, 0.45) !important;
 }
 
-/* "control-panel | prev / up / next" footer-links — style as breadcrumb */
+/* PREV / UP / NEXT navigation — moved by JS to sit between #ghead and grid */
 #ht_brw h2#wfp {
-    margin: 1.5em 0 .5em;
-    padding: .5em 0;
+    margin: 0.6em 0 0.6em !important;
+    padding: 0.4em 0.8em !important;
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: 0.85em;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    border-top: 1px dashed rgba(0, 255, 150, 0.15);
+    letter-spacing: 0.1em;
+    border: 1px solid rgba(0, 255, 150, 0.15);
+    border-radius: 6px;
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.6), rgba(3, 16, 24, 0.7));
+    font-weight: normal;
+    line-height: 1.6em;
 }
 
 #ht_brw h2#wfp a {
     color: var(--a);
     text-shadow: 0 0 6px rgba(0, 255, 150, 0.3);
+    padding: 0.15em 0.5em;
+}
+
+#ht_brw h2#wfp a:hover {
+    color: var(--a-hil);
+    background: rgba(0, 255, 150, 0.1);
+    border-radius: 3px;
 }
 
 /* srv_info ticker — tuck under header */
