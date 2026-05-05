@@ -727,10 +727,117 @@
 
         chiptuneWaveCache[url] = 'pending';
 
-        // Defer a tick so we don't hold up the playback path; the actual
-        // render is fast (low sample rate, <1s per minute of music).
+        // libopenmpt rendering is synchronous and CPU-bound. The chiptune
+        // playback path uses ScriptProcessorNode which runs its
+        // onaudioprocess callback on the main thread, so a long render
+        // here would starve playback (silent gap, time cursor freeze).
+        // To avoid that, render in tiny slices yielded to the event
+        // loop between each — playback's audio buffer keeps refilling
+        // while the waveform fills in incrementally over ~1-2 seconds.
+        var W = 800, H = 80;
+        var SR = 4000;                           // low sample rate is fine for a peak-sample waveform
+        var totalSamples = Math.floor(duration * SR);
+        var chunkFrames = 4000;                  // 1 sec per call into libopenmpt
+        var samplesPerPeak = Math.max(1, Math.floor(totalSamples / W));
+        var SLICE_BUDGET_MS = 8;                 // yield to audio thread every ~8 ms
+        var INITIAL_DELAY_MS = 200;              // let playback settle before starting
+
+        var ptr = 0, modPtr = 0, leftPtr = 0, rightPtr = 0;
+        var peaks = [];
+        var peaksCount = 0;
+        var curMin = 0, curMax = 0, accum = 0;
+        var rendered = 0;
+        var aborted = false;
+
+        function freeAll() {
+            try { if (modPtr) libopenmpt._openmpt_module_destroy(modPtr); } catch (e) {}
+            try { if (leftPtr) libopenmpt._free(leftPtr); } catch (e) {}
+            try { if (rightPtr) libopenmpt._free(rightPtr); } catch (e) {}
+            try { if (ptr) libopenmpt._free(ptr); } catch (e) {}
+            modPtr = leftPtr = rightPtr = ptr = 0;
+        }
+
+        function finalize() {
+            if (aborted) return;
+            try {
+                if (accum > 0 && peaksCount < W) {
+                    peaks.push(curMin, curMax);
+                    peaksCount++;
+                }
+                var c = document.createElement('canvas');
+                c.width = W; c.height = H;
+                var cx = c.getContext('2d');
+                cx.clearRect(0, 0, W, H);
+                cx.strokeStyle = 'rgba(255,255,255,0.85)';
+                cx.lineWidth = 1;
+                cx.beginPath();
+                for (var p = 0; p < peaksCount; p++) {
+                    var lo = peaks[p * 2];
+                    var hi = peaks[p * 2 + 1];
+                    var y1 = Math.round(H / 2 - hi * (H / 2 - 1));
+                    var y2 = Math.round(H / 2 - lo * (H / 2 - 1));
+                    cx.moveTo(p + 0.5, y1);
+                    cx.lineTo(p + 0.5, y2 + 1);
+                }
+                cx.stroke();
+                var dataUrl = c.toDataURL('image/png');
+                chiptuneWaveCache[url] = dataUrl;
+                try { window.pbar.loadwaves(dataUrl); } catch (e) {}
+            } catch (e) {
+                chiptuneWaveCache[url] = 'failed';
+                console.warn('kd-chiptune wave finalize failed:', e && e.message || e);
+            } finally {
+                freeAll();
+            }
+        }
+
+        function processSlice() {
+            if (aborted) { freeAll(); return; }
+            var sliceStart = (typeof performance !== 'undefined' && performance.now)
+                ? performance.now() : Date.now();
+            try {
+                while (rendered < totalSamples && peaksCount < W) {
+                    var want = Math.min(chunkFrames, totalSamples - rendered);
+                    var got = libopenmpt._openmpt_module_read_float_stereo(modPtr, SR, want, leftPtr, rightPtr);
+                    if (got <= 0) {
+                        // module ended early — finalize with what we have
+                        finalize();
+                        return;
+                    }
+                    var l = libopenmpt.HEAPF32.subarray(leftPtr / 4, leftPtr / 4 + got);
+                    var r = libopenmpt.HEAPF32.subarray(rightPtr / 4, rightPtr / 4 + got);
+                    for (var i = 0; i < got; i++) {
+                        var v = (l[i] + r[i]) * 0.5;
+                        if (v > curMax) curMax = v;
+                        if (v < curMin) curMin = v;
+                        accum++;
+                        if (accum >= samplesPerPeak) {
+                            peaks.push(curMin, curMax);
+                            peaksCount++;
+                            curMin = 0; curMax = 0; accum = 0;
+                            if (peaksCount >= W) break;
+                        }
+                    }
+                    rendered += got;
+                    var now = (typeof performance !== 'undefined' && performance.now)
+                        ? performance.now() : Date.now();
+                    if (now - sliceStart >= SLICE_BUDGET_MS) {
+                        setTimeout(processSlice, 0);
+                        return;
+                    }
+                }
+                finalize();
+            } catch (e) {
+                chiptuneWaveCache[url] = 'failed';
+                console.warn('kd-chiptune wave slice failed:', e && e.message || e);
+                freeAll();
+            }
+        }
+
+        // Kick off after a small initial delay so the audio thread has
+        // already started feeding the chiptune2 ScriptProcessor before
+        // we begin our render.
         setTimeout(function () {
-            var ptr = 0, modPtr = 0, leftPtr = 0, rightPtr = 0;
             try {
                 var byteArr = new Uint8Array(buffer);
                 var fileLen = byteArr.byteLength;
@@ -741,72 +848,16 @@
                 if (typeof libopenmpt._openmpt_module_set_repeat_count === 'function') {
                     libopenmpt._openmpt_module_set_repeat_count(modPtr, 0);
                 }
-
-                var SR = 4000;            // 4 kHz — fine for waveform
-                var W = 800, H = 80;
-                var totalSamples = Math.floor(duration * SR);
-                var chunk = 4000;         // 1 sec per chunk
-                leftPtr = libopenmpt._malloc(4 * chunk);
-                rightPtr = libopenmpt._malloc(4 * chunk);
-
-                var samplesPerPeak = Math.max(1, Math.floor(totalSamples / W));
-                var peaks = [];
-                var curMin = 0, curMax = 0, accum = 0;
-                var rendered = 0;
-                var safety = 0;
-
-                while (rendered < totalSamples && peaks.length < W && safety++ < 4000) {
-                    var want = Math.min(chunk, totalSamples - rendered);
-                    var got = libopenmpt._openmpt_module_read_float_stereo(modPtr, SR, want, leftPtr, rightPtr);
-                    if (got <= 0) break;
-                    var l = libopenmpt.HEAPF32.subarray(leftPtr / 4, leftPtr / 4 + got);
-                    var r = libopenmpt.HEAPF32.subarray(rightPtr / 4, rightPtr / 4 + got);
-                    for (var i = 0; i < got; i++) {
-                        var v = (l[i] + r[i]) * 0.5;
-                        if (v > curMax) curMax = v;
-                        if (v < curMin) curMin = v;
-                        accum++;
-                        if (accum >= samplesPerPeak) {
-                            peaks.push(curMin, curMax);
-                            curMin = 0; curMax = 0; accum = 0;
-                            if (peaks.length / 2 >= W) break;
-                        }
-                    }
-                    rendered += got;
-                }
-                if (accum > 0 && peaks.length / 2 < W) peaks.push(curMin, curMax);
-
-                var c = document.createElement('canvas');
-                c.width = W; c.height = H;
-                var cx = c.getContext('2d');
-                cx.clearRect(0, 0, W, H);
-                cx.strokeStyle = 'rgba(255,255,255,0.85)';
-                cx.lineWidth = 1;
-                cx.beginPath();
-                var n = peaks.length / 2;
-                for (var p = 0; p < n; p++) {
-                    var lo = peaks[p * 2];
-                    var hi = peaks[p * 2 + 1];
-                    var y1 = Math.round(H / 2 - hi * (H / 2 - 1));
-                    var y2 = Math.round(H / 2 - lo * (H / 2 - 1));
-                    cx.moveTo(p + 0.5, y1);
-                    cx.lineTo(p + 0.5, y2 + 1);
-                }
-                cx.stroke();
-
-                var dataUrl = c.toDataURL('image/png');
-                chiptuneWaveCache[url] = dataUrl;
-                try { window.pbar.loadwaves(dataUrl); } catch (e) {}
+                leftPtr = libopenmpt._malloc(4 * chunkFrames);
+                rightPtr = libopenmpt._malloc(4 * chunkFrames);
             } catch (e) {
-                console.warn('kd-chiptune wave render failed:', e && e.message || e);
                 chiptuneWaveCache[url] = 'failed';
-            } finally {
-                try { if (modPtr) libopenmpt._openmpt_module_destroy(modPtr); } catch (e) {}
-                try { if (leftPtr) libopenmpt._free(leftPtr); } catch (e) {}
-                try { if (rightPtr) libopenmpt._free(rightPtr); } catch (e) {}
-                try { if (ptr) libopenmpt._free(ptr); } catch (e) {}
+                console.warn('kd-chiptune wave setup failed:', e && e.message || e);
+                freeAll();
+                return;
             }
-        }, 0);
+            processSlice();
+        }, INITIAL_DELAY_MS);
     }
 
     // run after install pass — the existing tryInstall above wraps
