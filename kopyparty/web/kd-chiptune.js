@@ -123,7 +123,14 @@
     //   paused get, volume get/set, loop get/set, error get,
     //   onended/onerror/onloadeddata/onloadedmetadata/onprogress, plus
     //   addEventListener/removeEventListener for timeupdate, ended, etc.
-    function ChiptuneAudio() {
+    // `isPreload`: this instance backs `mp.au2`, copyparty's preload Audio
+    // element. It must not touch the singleton ChiptuneJsPlayer because
+    // doing so would `player.stop()` the currently playing track on
+    // `mp.au`. chiptune2 has no preload support anyway, so we leave the
+    // shim inert and let copyparty's normal `play()` path drive the
+    // actual track switch via `mp.au.src = ...`.
+    function ChiptuneAudio(isPreload) {
+        this._isPreload = !!isPreload;
         this._url = '';
         this._vol = 1;
         this._duration = NaN;
@@ -201,6 +208,14 @@
             this.networkState = 2;  // NETWORK_LOADING
             this.readyState = 0;
             if (!url) return;
+            // mp.au2 (preload) MUST NOT touch the singleton player —
+            // calling player.stop() here would kill the chiptune currently
+            // playing on mp.au. copyparty also can't sniff the buffered
+            // duration off a fake element so the swap-on-rsrc-match in
+            // browser.js play() never matches; that's fine because our
+            // wrapped window.play routes tracker tracks through
+            // playTracker which assigns directly to mp.au.src.
+            if (this._isPreload) return;
 
             var self = this;
             var loadId = this._loadId;
@@ -426,7 +441,7 @@
 
         if (!(window.mp.au instanceof ChiptuneAudio)) {
             window.mp.au = new ChiptuneAudio();
-            window.mp.au2 = new ChiptuneAudio(); // unused — chiptune doesn't preload
+            window.mp.au2 = new ChiptuneAudio(true); // preload no-op
             try { window.mp.set_ev(); } catch (e) {}
             try { window.widget.open(); } catch (e) {}
         }

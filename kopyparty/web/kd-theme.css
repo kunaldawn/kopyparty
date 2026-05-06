@@ -349,6 +349,17 @@ html#ht_brw #wrap {
     margin-left: calc(var(--kd-tree-w) + 2 * var(--kd-gap)) !important;
 }
 
+/* Each grid card becomes the containing block for its `:before` play
+   icon. Without this, the icon (position:absolute, no top/left) inherits
+   the viewport as its containing block, so #wrap's overflow:hidden
+   doesn't clip it — the icons of cards in a partially-clipped bottom
+   row leak below the wrap pane and into the gap between wrap and the
+   music widget. Making the card position:relative pulls the icon back
+   into wrap's clip rect. */
+html#ht_brw #ggrid > a {
+    position: relative !important;
+}
+
 html#ht_brw.np_open #wrap {
     margin-bottom: calc(2 * var(--kd-gap) + var(--kd-widget-h)) !important;
 }
