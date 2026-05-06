@@ -372,6 +372,19 @@ html#ht_brw #ggrid > a {
     width: auto !important;
     max-width: 14em;
     margin: 0 !important;
+    /* clip anything that tries to render past the card border —
+       upstream's image rule caps at a fixed 10em which can exceed our
+       auto-fill cell width on narrow viewports; this is the safety net
+       in case the image-side fix below also fails. */
+    overflow: hidden !important;
+}
+
+/* image inside the card — never wider than the card itself.
+   Replaces upstream's `max-width: var(--grid-sz)` (10em fixed) which
+   bled past the card whenever the grid cell shrunk under 10em. */
+html#ht_brw #ggrid > a img {
+    max-width: 100% !important;
+    height: auto !important;
 }
 
 /* `#ggrid` becomes a proper CSS grid on every breakpoint. The
