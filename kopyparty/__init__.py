@@ -70,6 +70,9 @@ web/browser.js
 web/browser2.html
 web/deps/butterchurn.min.js
 web/deps/butterchurnPresets.min.js
+web/deps/butterchurnPresetsExtra.min.js
+web/deps/butterchurnPresetsExtra2.min.js
+web/deps/butterchurnPresetsMD1.min.js
 web/deps/chiptune2.js
 web/deps/libopenmpt.js
 web/deps/libopenmpt.js.mem
@@ -99,6 +102,18 @@ web/up2k.js
 web/util.js
 """
 RES = set(zs.strip().split("\n"))
+
+# auto-register every JSON under web/deps/weekly/ — that directory holds
+# the butterchurn-presets-weekly bundle (552 individual preset files +
+# manifest.json), all served locally so the visualizer doesn't fan out
+# to S3. Listing each file in `zs` would be 553 lines of noise; a glob
+# at module load gets the same effect.
+import glob as _glob_  # local alias so we don't pollute module exports
+_mod_dir_ = os.path.dirname(os.path.abspath(__file__))
+for _p_ in _glob_.glob(os.path.join(_mod_dir_, "web", "deps", "weekly", "*.json")):
+    RES.add("web/deps/weekly/" + os.path.basename(_p_))
+del _glob_, _mod_dir_, _p_
+
 RESM = {}
 
 

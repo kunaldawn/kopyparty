@@ -73,24 +73,72 @@
         return (window.SR || '') + '/.kpr/w/deps/';
     }
 
+    function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = function () { resolve(); };
+            s.onerror = function () { reject(new Error('failed to load ' + src)); };
+            document.head.appendChild(s);
+        });
+    }
+
     function loadDeps() {
         if (depsLoaded) return Promise.resolve();
         if (depsLoading) return depsLoading;
         var base = rootSlash();
-        depsLoading = new Promise(function (resolve, reject) {
-            var s1 = document.createElement('script');
-            s1.src = base + 'butterchurn.min.js';
-            s1.onload = function () {
-                var s2 = document.createElement('script');
-                s2.src = base + 'butterchurnPresets.min.js';
-                s2.onload = function () { depsLoaded = true; resolve(); };
-                s2.onerror = function () { reject(new Error('butterchurnPresets load failed')); };
-                document.head.appendChild(s2);
-            };
-            s1.onerror = function () { reject(new Error('butterchurn load failed')); };
-            document.head.appendChild(s1);
+        // Load butterchurn (engine) first, then in parallel pull the
+        // four preset packs we ship: the default ~120 (Presets), plus
+        // Extra (~50), Extra2 (~50), MD1 (Milkdrop 1 ports). We tolerate
+        // any individual pack failing to load — the presets dict will
+        // just have fewer entries.
+        depsLoading = loadScript(base + 'butterchurn.min.js').then(function () {
+            return Promise.all([
+                loadScript(base + 'butterchurnPresets.min.js')
+                    .catch(function (e) { console.warn(e); }),
+                loadScript(base + 'butterchurnPresetsExtra.min.js')
+                    .catch(function (e) { console.warn(e); }),
+                loadScript(base + 'butterchurnPresetsExtra2.min.js')
+                    .catch(function (e) { console.warn(e); }),
+                loadScript(base + 'butterchurnPresetsMD1.min.js')
+                    .catch(function (e) { console.warn(e); }),
+                // weekly manifest — small JSON, lazy-loads each
+                // individual preset on demand. served locally from
+                // web/deps/weekly/ (no S3 round-trip).
+                fetch(base + 'weekly/manifest.json', { credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (j) { if (j) window.kdViz_weekly = j; })
+                    .catch(function (e) { console.warn('weekly manifest:', e); })
+            ]);
+        }).then(function () {
+            // require at least the default pack to consider load successful
+            if (!window.butterchurnPresets) throw new Error('butterchurnPresets not available');
+            depsLoaded = true;
         });
         return depsLoading;
+    }
+
+    // ----- weekly preset lazy loader -----
+    // Each weekly preset lives in its own JSON file under
+    // /.kpr/w/deps/weekly/<hash>.json. The manifest maps preset name
+    // → filename. We populate the dropdown with these names immediately
+    // (so the user sees ~552 extra options), then fetch the actual JSON
+    // the first time the user selects one. Cache by hash.
+    var weeklyCache = Object.create(null);
+    var weeklyInflight = Object.create(null);
+
+    function fetchWeeklyPreset(name) {
+        if (!window.kdViz_weekly) return Promise.reject(new Error('no weekly manifest'));
+        var fname = window.kdViz_weekly[name];
+        if (!fname) return Promise.reject(new Error('not in manifest: ' + name));
+        if (weeklyCache[fname]) return Promise.resolve(weeklyCache[fname]);
+        if (weeklyInflight[fname]) return weeklyInflight[fname];
+        var url = rootSlash() + 'weekly/' + encodeURIComponent(fname);
+        weeklyInflight[fname] = fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { if (!r.ok) throw new Error('fetch ' + r.status); return r.json(); })
+            .then(function (j) { weeklyCache[fname] = j; delete weeklyInflight[fname]; return j; })
+            .catch(function (e) { delete weeklyInflight[fname]; throw e; });
+        return weeklyInflight[fname];
     }
 
     function buildPanel() {
@@ -208,8 +256,40 @@
         }
 
         try {
-            var bcp = window.butterchurnPresets.default || window.butterchurnPresets;
-            presets = (typeof bcp.getPresets === 'function') ? bcp.getPresets() : bcp;
+            // Merge the bundled packs into one dict so the user sees
+            // ~395 presets eagerly available. Weekly presets (~552)
+            // are added as keys-only — their JSON is lazy-fetched on
+            // first selection in applyPreset().
+            var packs = [
+                window.butterchurnPresets,
+                window.butterchurnPresetsExtra,
+                window.butterchurnPresetsExtra2,
+                window.butterchurnPresetsMD1
+            ];
+            presets = {};
+            for (var i = 0; i < packs.length; i++) {
+                var pack = packs[i];
+                if (!pack) continue;
+                var p = pack.default || pack;
+                var dict = (typeof p.getPresets === 'function') ? p.getPresets() : p;
+                if (dict && typeof dict === 'object') {
+                    for (var k in dict) {
+                        if (Object.prototype.hasOwnProperty.call(dict, k))
+                            presets[k] = dict[k];
+                    }
+                }
+            }
+            // mix in the 552 weekly preset names. Sentinel value `null`
+            // marks them as "not loaded yet"; applyPreset detects null
+            // and falls back to fetchWeeklyPreset(name).
+            if (window.kdViz_weekly) {
+                for (var wk in window.kdViz_weekly) {
+                    if (Object.prototype.hasOwnProperty.call(window.kdViz_weekly, wk)
+                        && !Object.prototype.hasOwnProperty.call(presets, wk)) {
+                        presets[wk] = null;
+                    }
+                }
+            }
             presetKeys = Object.keys(presets).sort();
             presetIdx = Math.floor(Math.random() * presetKeys.length);
             applyPreset(0);
@@ -224,15 +304,36 @@
     function applyPreset(blendSec) {
         if (!viz || !presetKeys || !presetKeys.length) return;
         var key = presetKeys[presetIdx];
-        try {
-            viz.loadPreset(presets[key], typeof blendSec === 'number' ? blendSec : 1.5);
-            if (nameEl) {
-                var pretty = key.replace(/^[^-]+ - /, '');  // strip "AuthorName - " prefix
-                nameEl.textContent = pretty.length > 70 ? pretty.slice(0, 67) + '…' : pretty;
-            }
-        } catch (e) {
-            console.warn('kdVisualizer applyPreset failed:', e);
+        var blend = typeof blendSec === 'number' ? blendSec : 1.5;
+
+        var setName = function () {
+            if (!nameEl) return;
+            var pretty = key.replace(/^[^-]+ - /, '');
+            nameEl.textContent = pretty.length > 70 ? pretty.slice(0, 67) + '…' : pretty;
+        };
+
+        var preset = presets[key];
+        if (preset) {
+            try { viz.loadPreset(preset, blend); setName(); }
+            catch (e) { console.warn('kdVisualizer applyPreset failed:', e); }
+            return;
         }
+
+        // null sentinel → weekly preset, fetch lazily and cache. Show a
+        // brief "loading" hint in the name pill so it's clear that a
+        // network round-trip is happening.
+        if (nameEl) nameEl.textContent = '⏳ loading…';
+        fetchWeeklyPreset(key).then(function (json) {
+            // user may have skipped to a different preset while the
+            // fetch was in flight — only apply if still selected.
+            if (presetKeys[presetIdx] !== key) return;
+            presets[key] = json;
+            try { viz.loadPreset(json, blend); setName(); }
+            catch (e) { console.warn('kdVisualizer applyPreset (weekly) failed:', e); setName(); }
+        }).catch(function (e) {
+            console.warn('kdVisualizer fetch weekly failed:', e);
+            setName();
+        });
     }
 
     function stepPreset(delta) {
