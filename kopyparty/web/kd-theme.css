@@ -1988,6 +1988,14 @@ html#ht_rup #tw th {
     display: none !important;
 }
 
+/* Hide the first `<i>` separator inside #path. copyparty's
+   reload_browser appends `<i>` + `<a>` for every URL segment, so the
+   first `<i>` ends up between the (hidden) #entree and the leading `/`
+   anchor — visible to the user as a stray `>` before `/`. */
+#ht_brw #path > i:first-of-type {
+    display: none !important;
+}
+
 /* keep .kd-mobile-only as a no-op alias so any other element using it
    stays hidden by default — but the hamburger above no longer carries
    this class, so that's already handled. */
@@ -2050,12 +2058,22 @@ html#ht_rup #tw th {
 
     /* mobile: tree is a slide-out drawer, so wrap takes the full width
        (gap on each viewport edge) and the player widget anchors directly
-       below it without leaving room for the sidebar. */
+       below it without leaving room for the sidebar. Wrap horizontal
+       padding shrinks to 0.7em to leave room for two 10em grid cards
+       at narrow widths; #path's negative margin mirrors that smaller
+       padding so the slash glyph still sits at the same offset from
+       wrap.left as on desktop. */
     html#ht_brw #wrap {
         margin-left: var(--kd-gap) !important;
         margin-right: var(--kd-gap) !important;
         padding-left: 0.7em !important;
         padding-right: 0.7em !important;
+    }
+    html#ht_brw #path {
+        margin-left: -0.7em !important;
+        margin-right: -0.7em !important;
+        padding-left: 1.5em !important;
+        padding-right: 1.5em !important;
     }
 
     /* widget + viz panel match wrap horizontally on mobile */
@@ -2068,7 +2086,6 @@ html#ht_rup #tw th {
         right: var(--kd-gap) !important;
     }
 
-    #ht_brw #path,
     #ht_brw #ops,
     #ht_brw .opview.act {
         margin-left: var(--kd-gap);
