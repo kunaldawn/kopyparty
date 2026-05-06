@@ -24,6 +24,7 @@
     var SVG_AUTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M21 12a9 9 0 1 1-3.5-7.1 M21 4v5h-5"/></svg>';
     var SVG_FS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5"/></svg>';
     var SVG_CLOSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><polygon points="6,9 18,9 12,17"/></svg>';
+    var SVG_VOL = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block"><polygon points="3,10 3,14 7,14 12,18 12,6 7,10"/><path d="M15.5 12 a3 3 0 0 0 -1.5 -2.6 v5.2 a3 3 0 0 0 1.5 -2.6 z M17.5 12 a5 5 0 0 0 -3.5 -4.8 v1.6 a3.5 3.5 0 0 1 0 6.4 v1.6 a5 5 0 0 0 3.5 -4.8 z"/></svg>';
 
     var depsLoaded = false;
     var depsLoading = null;
@@ -41,12 +42,32 @@
     // auto-cycle: randomly swap preset on a fixed interval (and on
     // track change). Persisted to localStorage so the user's choice
     // survives reloads.
-    var AUTO_INTERVAL_MS = 30 * 1000;
+    var AUTO_INTERVAL_OPTIONS_S = [5, 10, 15, 30, 60, 120, 300];
+    var autoIntervalIdx = 3;
+    try {
+        var savedIv = window.localStorage && window.localStorage.getItem('kd_viz_interval');
+        if (savedIv !== null) {
+            var n = parseInt(savedIv, 10);
+            var idx = AUTO_INTERVAL_OPTIONS_S.indexOf(n);
+            if (idx >= 0) autoIntervalIdx = idx;
+        }
+    } catch (e) {}
+    var AUTO_INTERVAL_MS = AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx] * 1000;
     var autoCycle = false;
     var autoTimer = null;
     try {
         autoCycle = window.localStorage && window.localStorage.getItem('kd_viz_auto') === '1';
     } catch (e) {}
+
+    function fmtIntervalLabel(s) {
+        return s < 60 ? (s + 's') : ((s / 60) + 'm');
+    }
+    function fmtTime(s) {
+        if (!isFinite(s) || s < 0) s = 0;
+        var m = Math.floor(s / 60);
+        var ss = Math.floor(s % 60);
+        return m + ':' + (ss < 10 ? '0' : '') + ss;
+    }
 
     function rootSlash() {
         return (window.SR || '') + '/.kpr/w/deps/';
@@ -78,11 +99,28 @@
         panel.id = 'kd-viz-panel';
         panel.innerHTML =
             '<canvas id="kd-viz-canvas"></canvas>' +
-            '<div id="kd-viz-info"><span id="kd-viz-name">…</span></div>' +
+            // top-left: currently playing track filename
+            '<div id="kd-viz-track"><span id="kd-viz-track-name">—</span></div>' +
+            // top-right: preset name (clickable → opens search dropdown)
+            '<a href="#" id="kd-viz-info" title="click to search presets"><span id="kd-viz-name">…</span></a>' +
+            // searchable preset dropdown (anchored top-right under the
+            // info pill, hidden until the pill is clicked)
+            '<div id="kd-viz-search" role="dialog" aria-label="preset search">' +
+                '<input type="text" id="kd-viz-search-input" placeholder="search presets…" autocomplete="off" spellcheck="false" />' +
+                '<ul id="kd-viz-search-list"></ul>' +
+            '</div>' +
+            // bottom-left: hosts the real #widget when fullscreen is
+            // active. JS moves the widget DOM in/out on fullscreenchange
+            // so the actual copyparty player renders here — same buttons,
+            // same progress canvas, same volume canvas — with a
+            // transparent override applied via CSS.
+            '<div id="kd-viz-music"></div>' +
+            // bottom-right: viz controls
             '<div id="kd-viz-ctrl">' +
                 '<a href="#" id="kd-viz-prev" title="previous preset (left arrow)">' + SVG_PREV + '</a>' +
                 '<a href="#" id="kd-viz-rand" title="random preset (R)">' + SVG_RAND + '</a>' +
-                '<a href="#" id="kd-viz-auto" title="auto-cycle every 30s + on track change (A)">' + SVG_AUTO + '</a>' +
+                '<a href="#" id="kd-viz-auto" title="auto-cycle on/off (A)">' + SVG_AUTO + '</a>' +
+                '<a href="#" id="kd-viz-interval" title="cycle interval (click to change)"><span>' + fmtIntervalLabel(AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx]) + '</span></a>' +
                 '<a href="#" id="kd-viz-next" title="next preset (right arrow)">' + SVG_NEXT + '</a>' +
                 '<a href="#" id="kd-viz-fs" title="fullscreen (F)">' + SVG_FS + '</a>' +
                 '<a href="#" id="kd-viz-close" title="close (Escape)">' + SVG_CLOSE + '</a>' +
@@ -104,6 +142,7 @@
 
         canvas = document.getElementById('kd-viz-canvas');
         nameEl = document.getElementById('kd-viz-name');
+
         var on = function (id, fn) {
             var el = document.getElementById(id);
             if (el) el.addEventListener('click', function (e) { e.preventDefault(); fn(); });
@@ -112,11 +151,38 @@
         on('kd-viz-next', function () { stepPreset(1); });
         on('kd-viz-rand', function () { randomPreset(); });
         on('kd-viz-auto', function () { setAutoCycle(!autoCycle); });
+        on('kd-viz-interval', cycleInterval);
         on('kd-viz-fs', toggleFullscreen);
         on('kd-viz-close', closePanel);
 
-        // reflect persisted auto-cycle state on the freshly-built button
+        // info pill → preset search dropdown
+        on('kd-viz-info', toggleSearch);
+
+        // search input handlers
+        var sInput = document.getElementById('kd-viz-search-input');
+        if (sInput) {
+            sInput.addEventListener('input', function () { buildSearchList(this.value); });
+            sInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); }
+                else if (e.key === 'Enter') {
+                    var first = document.querySelector('#kd-viz-search-list li');
+                    if (first) first.click();
+                }
+            });
+        }
+        // click-outside dismisses the dropdown
+        document.addEventListener('click', function (e) {
+            var s = document.getElementById('kd-viz-search');
+            if (!s || !s.classList.contains('open')) return;
+            var info = document.getElementById('kd-viz-info');
+            if (s.contains(e.target) || (info && info.contains(e.target))) return;
+            closeSearch();
+        }, true);
+
+        // reflect persisted state on the freshly-built buttons
         updateAutoButtonState();
+        updateIntervalLabel();
+        updateTrackName();
     }
 
     function ensureViz() {
@@ -229,7 +295,166 @@
         if (!btn) return;
         if (autoCycle) btn.classList.add('on');
         else btn.classList.remove('on');
+        // also expose state on the panel so CSS can show/hide the
+        // interval chip without JS.
+        if (panel) panel.classList.toggle('kd-viz-auto-on', autoCycle);
     }
+
+    function cycleInterval() {
+        autoIntervalIdx = (autoIntervalIdx + 1) % AUTO_INTERVAL_OPTIONS_S.length;
+        AUTO_INTERVAL_MS = AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx] * 1000;
+        try {
+            if (window.localStorage)
+                window.localStorage.setItem('kd_viz_interval', AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx]);
+        } catch (e) {}
+        updateIntervalLabel();
+        // restart the timer with the new interval
+        scheduleAutoCycle(true);
+    }
+
+    function updateIntervalLabel() {
+        var el = document.getElementById('kd-viz-interval');
+        if (!el) return;
+        var span = el.querySelector('span');
+        if (span) span.textContent = fmtIntervalLabel(AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx]);
+    }
+
+    // ----- preset search dropdown -----
+
+    function buildSearchList(filter) {
+        var list = document.getElementById('kd-viz-search-list');
+        if (!list || !presetKeys) return;
+        list.innerHTML = '';
+        var f = (filter || '').toLowerCase().trim();
+        var matched = f
+            ? presetKeys.filter(function (k) { return k.toLowerCase().indexOf(f) >= 0; })
+            : presetKeys;
+        // cap displayed rows so a long list doesn't tank the panel
+        var max = 200;
+        var fragment = document.createDocumentFragment();
+        for (var i = 0; i < Math.min(matched.length, max); i++) {
+            var key = matched[i];
+            var li = document.createElement('li');
+            // strip the "AuthorName - " prefix in the visible text but
+            // keep it queryable via the original key for search.
+            li.textContent = key.replace(/^[^-]+ - /, '');
+            li.title = key;
+            var globalIdx = presetKeys.indexOf(key);
+            li.dataset.idx = globalIdx;
+            if (globalIdx === presetIdx) li.className = 'current';
+            li.addEventListener('click', function () {
+                var idx = parseInt(this.dataset.idx, 10);
+                if (isNaN(idx) || idx < 0) return;
+                presetIdx = idx;
+                applyPreset();
+                scheduleAutoCycle(true);
+                closeSearch();
+            });
+            fragment.appendChild(li);
+        }
+        list.appendChild(fragment);
+        if (matched.length > max) {
+            var more = document.createElement('li');
+            more.className = 'more';
+            more.textContent = '… ' + (matched.length - max) + ' more — refine search';
+            list.appendChild(more);
+        }
+    }
+
+    function openSearch() {
+        var s = document.getElementById('kd-viz-search');
+        if (!s) return;
+        s.classList.add('open');
+        var input = document.getElementById('kd-viz-search-input');
+        if (input) {
+            input.value = '';
+            buildSearchList('');
+            // delay focus so the click that opened the dropdown doesn't
+            // immediately re-blur it via the document click listener
+            setTimeout(function () { input.focus(); }, 0);
+        }
+    }
+
+    function closeSearch() {
+        var s = document.getElementById('kd-viz-search');
+        if (s) s.classList.remove('open');
+    }
+
+    function toggleSearch() {
+        var s = document.getElementById('kd-viz-search');
+        if (s && s.classList.contains('open')) closeSearch();
+        else openSearch();
+    }
+
+    // ----- track-name + music time sync -----
+
+    function updateTrackName() {
+        var el = document.getElementById('kd-viz-track-name');
+        if (!el) return;
+        var fname = '';
+        if (window.mp && window.mp.au && window.mp.au.tid && window.mp.tracks) {
+            var url = window.mp.tracks[window.mp.au.tid];
+            if (typeof url === 'string') {
+                try {
+                    fname = decodeURIComponent(url.split('/').pop().split('?')[0]);
+                } catch (e) {
+                    fname = url.split('/').pop().split('?')[0];
+                }
+            }
+        }
+        el.textContent = fname || '—';
+    }
+
+    // ----- host/restore the real #widget inside the viz panel on
+    // ----- fullscreenchange. We physically move the DOM node so the
+    // ----- player visible in fullscreen IS the same instance copyparty's
+    // ----- code drives (same canvases, same buttons, same audio
+    // ----- bindings). On exit, we put it back where it came from.
+
+    var widgetHome = null;  // { parent, nextSibling }
+
+    function moveWidgetIntoPanel() {
+        var widget = document.getElementById('widget');
+        var music = document.getElementById('kd-viz-music');
+        if (!widget || !music) return;
+        if (widget.parentNode === music) return;
+        widgetHome = { parent: widget.parentNode, nextSibling: widget.nextSibling };
+        music.appendChild(widget);
+        // ping pbar so it re-measures the canvas after reparenting
+        try {
+            if (window.pbar && typeof window.pbar.onresize === 'function')
+                window.pbar.onresize();
+            if (window.vbar && typeof window.vbar.onresize === 'function')
+                window.vbar.onresize();
+        } catch (e) {}
+    }
+
+    function restoreWidget() {
+        if (!widgetHome) return;
+        var widget = document.getElementById('widget');
+        if (widget) {
+            try {
+                widgetHome.parent.insertBefore(widget, widgetHome.nextSibling);
+            } catch (e) {
+                widgetHome.parent.appendChild(widget);
+            }
+        }
+        widgetHome = null;
+        try {
+            if (window.pbar && typeof window.pbar.onresize === 'function')
+                window.pbar.onresize();
+            if (window.vbar && typeof window.vbar.onresize === 'function')
+                window.vbar.onresize();
+        } catch (e) {}
+    }
+
+    function onFullscreenChange() {
+        var fs = document.fullscreenElement || document.webkitFullscreenElement;
+        if (fs && panel && fs === panel) moveWidgetIntoPanel();
+        else restoreWidget();
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
     // route audio source → butterchurn analyser
     function connectAudio(force) {
@@ -298,6 +523,7 @@
             setTimeout(function () { resizeCanvas(); }, 380);
             if (rafId === null) renderLoop();
             updateToggleState();
+            updateTrackName();
             scheduleAutoCycle(true);
         }).catch(function (e) {
             console.warn('kdVisualizer load failed:', e && e.message || e);
@@ -305,7 +531,13 @@
     }
 
     function closePanel() {
+        // exit fullscreen first if active, so the widget gets restored
+        // to its normal position before we hide the panel.
+        if (document.fullscreenElement && document.exitFullscreen) {
+            try { document.exitFullscreen(); } catch (e) {}
+        }
         if (panel) panel.classList.remove('kd-viz-open');
+        closeSearch();
         updateToggleState();
         // stop the cycle while the panel is hidden — no point spinning
         // a 30 s timer just to advance an off-screen visualizer.
@@ -400,6 +632,10 @@
             if (autoCycle && viz && isOpen()) {
                 randomPreset();
             }
+            // refresh the track-name strip in the corner whenever the
+            // active track switches (works for both browser-native and
+            // chiptune playback).
+            updateTrackName();
         }
     };
 

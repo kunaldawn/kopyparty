@@ -1175,13 +1175,40 @@ html#ht_spl body {
     border-radius: 0;
 }
 
-#ht_brw #kd-viz-info {
+/* top-left: currently playing track filename. Pure-display chip with
+   pointer-events:none so it never intercepts canvas interaction. */
+#ht_brw #kd-viz-track {
     position: absolute;
     top: 10px;
     left: 12px;
-    max-width: calc(100% - 24px);
+    max-width: calc(50% - 24px);
     padding: 4px 10px;
-    background: rgba(7, 24, 35, 0.78);
+    background: rgba(7, 24, 35, 0.35);
+    border: 1px solid rgba(0, 255, 150, 0.18);
+    border-radius: 6px;
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    letter-spacing: 0.04em;
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 4;
+}
+
+/* top-right: preset name. Click to open the preset search dropdown. */
+#ht_brw #kd-viz-info {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    left: auto;
+    max-width: calc(50% - 24px);
+    padding: 4px 10px;
+    background: rgba(7, 24, 35, 0.35);
     border: 1px solid rgba(0, 255, 150, 0.25);
     border-radius: 6px;
     color: var(--a);
@@ -1189,10 +1216,179 @@ html#ht_spl body {
     font-size: 0.78em;
     letter-spacing: 0.04em;
     text-shadow: 0 0 6px rgba(0, 255, 150, 0.4);
-    pointer-events: none;
+    text-decoration: none;
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 4;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+#ht_brw #kd-viz-info:hover {
+    background: rgba(0, 255, 150, 0.18);
+    border-color: var(--a);
+    box-shadow: 0 0 10px rgba(0, 255, 150, 0.3);
+}
+#ht_brw #kd-viz-info:after {
+    content: ' ▾';
+    color: var(--a);
+    opacity: 0.7;
+}
+
+/* searchable preset dropdown — anchored under the info pill */
+#ht_brw #kd-viz-search {
+    position: absolute;
+    top: 44px;
+    right: 12px;
+    width: min(360px, calc(100% - 24px));
+    max-height: min(420px, calc(100% - 96px));
+    display: none;
+    flex-direction: column;
+    background: rgba(5, 13, 18, 0.92);
+    border: 1px solid rgba(0, 255, 150, 0.4);
+    border-radius: 10px;
+    box-shadow:
+        0 12px 36px rgba(0, 0, 0, 0.7),
+        0 0 36px rgba(0, 255, 150, 0.12);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    overflow: hidden;
+    z-index: 6;
+}
+#ht_brw #kd-viz-search.open {
+    display: flex;
+}
+#ht_brw #kd-viz-search-input {
+    background: rgba(0, 0, 0, 0.45);
+    border: none;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.3);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 8px 12px;
+    outline: none;
+    flex-shrink: 0;
+}
+#ht_brw #kd-viz-search-input::placeholder {
+    color: var(--fg-weak);
+    opacity: 0.6;
+}
+#ht_brw #kd-viz-search-input:focus {
+    background: rgba(0, 255, 150, 0.06);
+    border-bottom-color: var(--a);
+}
+#ht_brw #kd-viz-search-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+#ht_brw #kd-viz-search-list li {
+    padding: 6px 12px;
+    color: var(--fg-weak);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    line-height: 1.4;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.04);
+    transition: background .1s ease, color .1s ease;
+}
+#ht_brw #kd-viz-search-list li.more {
+    cursor: default;
+    color: var(--fg-weak);
+    opacity: 0.7;
+    font-style: italic;
+    text-align: center;
+    pointer-events: none;
+}
+#ht_brw #kd-viz-search-list li:hover {
+    background: rgba(0, 255, 150, 0.1);
+    color: var(--a);
+}
+#ht_brw #kd-viz-search-list li.current {
+    background: rgba(0, 255, 150, 0.14);
+    color: var(--a);
+    border-left: 3px solid var(--a);
+    padding-left: 9px;
+}
+
+/* `#kd-viz-music` is the slot that hosts the real `#widget` element
+   when the panel goes fullscreen. JS in kd-visualizer.js moves the
+   widget DOM in/out on fullscreenchange.
+   On desktop fullscreen the music panel spans the full bottom width
+   and the viz-ctrl row floats just above it on the right side, taking
+   only its content-width. On mobile (handled by the @media block
+   further down) the order flips — viz-ctrl is at the bottom and the
+   music panel sits above it, both full-width. */
+#ht_brw #kd-viz-music {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    right: auto;
+    display: none;
+    box-sizing: border-box;
+    z-index: 4;
+}
+#ht_brw #kd-viz-panel:fullscreen #kd-viz-music,
+#ht_brw #kd-viz-panel:-webkit-full-screen #kd-viz-music {
+    display: block;
+    left: 12px;
+    right: 12px;
+    bottom: 10px;
+}
+#ht_brw #kd-viz-panel:fullscreen #kd-viz-ctrl,
+#ht_brw #kd-viz-panel:-webkit-full-screen #kd-viz-ctrl {
+    /* sit above the music panel: 10 (music bottom) + widget-h + 8 gap */
+    bottom: calc(10px + var(--kd-widget-h) + 8px);
+    right: 12px;
+    /* content-width — no left override so the panel hugs the right edge */
+    height: auto;
+}
+
+/* The real #widget when hosted inside the music slot. Override its
+   default fixed-positioning + opaque chrome to a transparent inline
+   panel that fits the slot. Specificity (0,3,2 with !important) beats
+   the desktop `#ht_brw #widget.open` rule (0,2,1). */
+#ht_brw #kd-viz-music > #widget.open {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    margin: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+/* card panel inside widget — translucent neon to match the rest of
+   the fullscreen chrome */
+#ht_brw #kd-viz-music > #widget.open > #widgeti {
+    background: rgba(7, 24, 35, 0.35) !important;
+    border: 1px solid rgba(0, 255, 150, 0.22) !important;
+    box-shadow: 0 0 0 1px rgba(0, 255, 150, 0.05) inset !important;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+/* hide the visualizer-toggle tab when the widget is inside the viz
+   panel — re-opening "viz" from inside the viz fullscreen makes no
+   sense and the tab visually clashes with the surrounding panel. */
+#ht_brw #kd-viz-music > #widget > #kd-viz-toggle {
+    display: none !important;
+}
+
+/* fade the progress/volume canvases so the visualizer behind them
+   stays partially visible — but keep them noticeably more solid than
+   the surrounding panel chrome (rgba(7,24,35,0.35) ≈ 35 % alpha)
+   so the bars still read as foreground UI elements. */
+#ht_brw #kd-viz-music > #widget #barbuf,
+#ht_brw #kd-viz-music > #widget #barpos,
+#ht_brw #kd-viz-music > #widget #pvol {
+    opacity: 0.75;
 }
 
 #ht_brw #kd-viz-ctrl {
@@ -1201,12 +1397,35 @@ html#ht_spl body {
     right: 10px;
     display: flex;
     gap: 4px;
-    background: rgba(7, 24, 35, 0.55);
+    background: rgba(7, 24, 35, 0.35);
     padding: 4px;
     border: 1px solid rgba(0, 255, 150, 0.22);
     border-radius: 8px;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 4;
+}
+
+/* the auto-cycle interval chip — visible only when auto is on, drives
+   AUTO_INTERVAL_MS via cycleInterval(). Same height as the round
+   buttons (30px) so the row reads as a uniform set; just wider and
+   with text content. box-sizing: border-box keeps the height pinned
+   regardless of padding. */
+#ht_brw #kd-viz-ctrl a#kd-viz-interval {
+    display: none;
+    width: auto;
+    min-width: 36px;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    font-family: var(--font-mono);
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+#ht_brw #kd-viz-panel.kd-viz-auto-on #kd-viz-ctrl a#kd-viz-interval {
+    display: inline-flex;
 }
 
 #ht_brw #kd-viz-ctrl a {
@@ -1215,6 +1434,8 @@ html#ht_spl body {
     justify-content: center;
     width: 30px;
     height: 30px;
+    box-sizing: border-box;
+    padding: 0;
     color: var(--a);
     background: rgba(0, 0, 0, 0.45);
     border: 1px solid rgba(0, 255, 150, 0.3);
@@ -1237,22 +1458,25 @@ html#ht_spl body {
     transform: scale(0.96);
 }
 
+/* selected state — translucent neon fill instead of solid var(--a),
+   subtle glow instead of the previous floodlight box-shadow. Reads
+   clearly as "active" without obscuring the visualizer behind it. */
 #ht_brw #kd-viz-ctrl a.on {
-    color: #071013;
-    background: var(--a);
-    border-color: var(--a);
+    color: var(--a);
+    background: rgba(0, 255, 150, 0.22);
+    border-color: rgba(0, 255, 150, 0.6);
     box-shadow:
-        0 0 12px rgba(0, 255, 150, 0.5),
-        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        inset 0 0 0 1px rgba(0, 255, 150, 0.25),
+        0 0 5px rgba(0, 255, 150, 0.18);
 }
 
 #ht_brw #kd-viz-ctrl a.on:hover {
-    color: #071013;
-    background: var(--a-hil);
-    border-color: var(--a-hil);
+    color: var(--a-hil);
+    background: rgba(0, 255, 150, 0.32);
+    border-color: var(--a);
     box-shadow:
-        0 0 16px rgba(0, 255, 150, 0.7),
-        inset 0 1px 0 rgba(255, 255, 255, 0.22);
+        inset 0 0 0 1px rgba(0, 255, 150, 0.35),
+        0 0 8px rgba(0, 255, 150, 0.3);
 }
 
 @media (max-width: 760px) {
@@ -1265,11 +1489,38 @@ html#ht_spl body {
     #ht_brw #kd-viz-panel.kd-viz-open {
         height: 200px;
     }
-    #ht_brw #kd-viz-info {
+    #ht_brw #kd-viz-track {
         font-size: 0.7em;
         padding: 3px 8px;
         top: 8px;
         left: 8px;
+    }
+    #ht_brw #kd-viz-info {
+        font-size: 0.7em;
+        padding: 3px 8px;
+        top: 8px;
+        right: 8px;
+    }
+    #ht_brw #kd-viz-search {
+        top: 36px;
+        right: 8px;
+    }
+    /* mobile fullscreen: viz-ctrl at the bottom, music panel above it,
+       both spanning the full viewport width — the inverse of the
+       desktop arrangement (which has music at the bottom and viz-ctrl
+       floating above-right). */
+    #ht_brw #kd-viz-panel:fullscreen #kd-viz-music,
+    #ht_brw #kd-viz-panel:-webkit-full-screen #kd-viz-music {
+        left: 8px;
+        right: 8px;
+        bottom: calc(8px + 30px + 8px + 8px);   /* viz-ctrl-bottom + viz-ctrl-h + gap */
+    }
+    #ht_brw #kd-viz-panel:fullscreen #kd-viz-ctrl,
+    #ht_brw #kd-viz-panel:-webkit-full-screen #kd-viz-ctrl {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        justify-content: center;
     }
     #ht_brw #kd-viz-ctrl {
         bottom: 8px;
@@ -1281,6 +1532,11 @@ html#ht_spl body {
         width: 26px;
         height: 26px;
         font-size: 12px;
+    }
+    #ht_brw #kd-viz-ctrl a#kd-viz-interval {
+        min-width: 30px;
+        padding: 0 6px;
+        font-size: 0.62em;
     }
 }
 
