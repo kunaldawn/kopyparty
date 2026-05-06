@@ -347,6 +347,12 @@ html#ht_brw #wrap {
     margin-right: var(--kd-gap) !important;
     margin-bottom: var(--kd-gap) !important;
     margin-left: calc(var(--kd-tree-w) + 2 * var(--kd-gap)) !important;
+    /* reserve scrollbar gutter on both sides so the content sits
+       symmetrically within the panel, even when the vertical scrollbar
+       takes its ~10px on the right. Without this, the right-hand
+       inset visually grows by `scrollbar-width` while the left stays
+       at the CSS padding only. */
+    scrollbar-gutter: stable both-edges;
 }
 
 /* Each grid card becomes the containing block for its `:before` play
@@ -358,6 +364,29 @@ html#ht_brw #wrap {
    into wrap's clip rect. */
 html#ht_brw #ggrid > a {
     position: relative !important;
+    /* let cards stretch to fill grid cells (avoids the upstream
+       width:10em + margin:.5em + ggrid -.5em bleed which left an
+       asymmetric right-side gap when grid columns auto-fill at narrow
+       widths). max-width keeps cards from looking gigantic on very
+       wide screens. */
+    width: auto !important;
+    max-width: 14em;
+    margin: 0 !important;
+}
+
+/* `#ggrid` becomes a proper CSS grid on every breakpoint. The
+   negative margins copyparty's browser.css applies (-.2em -.5em)
+   conflict with auto-fill grid columns and produce asymmetric padding
+   inside wrap; zero them out and let the grid track gaps drive
+   spacing. `gap: 8px` matches the `.5em` cards used to leave between
+   themselves. */
+html#ht_brw #ggrid {
+    margin: 0 !important;
+    padding: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+    gap: 8px !important;
+    justify-items: stretch;
 }
 
 html#ht_brw.np_open #wrap {
@@ -1803,19 +1832,43 @@ html#ht_rup #tw th {
     color: var(--a);
 }
 
-/* ZIP button injected at the end of the grid toolbar.
-   Float:right doesn't fit on the toolbar row when the inline content
-   already fills it, so anchor it to the top-right corner of #ghead. */
+/* Toolbar (#ghead) — flex-wrap row with symmetric padding on both
+   sides. ZIP is the last flex child, pushed to the right via
+   `margin-left: auto`. This drops the previous absolute-positioning
+   trick which created mismatched padding-right on multi-row mobile
+   layouts (TYPE button overflowed into the reserved 92px gutter). */
 #ht_brw #ghead {
     position: relative;
-    padding-right: 92px;
+    padding: 8px 12px !important;
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 4px;
+    line-height: 1.6em !important;
+}
+
+/* The "sort by:", "zoom:", "chop:" rows are each a single span that
+   wraps a label plus its inline buttons. Make each span its own
+   flex-wrap container so when the row's combined width exceeds the
+   toolbar, the buttons wrap onto a new line instead of overflowing
+   ghead's right edge. */
+#ht_brw .ghead > span {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    white-space: normal;
+    padding-left: 0;
+    margin: 0;
+    min-width: 0;
 }
 
 #ht_brw .ghead a.kd-zip-btn {
     float: none;
-    position: absolute;
-    top: 8px;
-    right: 10px;
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    margin-left: auto !important;
     color: #071013;
     background: var(--a);
     border-color: var(--a);
