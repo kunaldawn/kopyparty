@@ -18,7 +18,7 @@
 
 <body>
 	<header class="kd-header">
-		<a class="kd-link kd-mobile-only" id="kd-mobile-tree-toggle" href="#" aria-label="toggle folder tree">≡</a>
+		<a class="kd-link kd-tree-toggle" id="kd-tree-toggle" href="#" aria-label="toggle folder tree">≡</a>
 		<div class="kd-title"><h1>{{ this.args.kd_header|e }}</h1></div>
 		<nav class="kd-nav">
 			<a class="kd-link" href="https://kunaldawn.com" target="_blank" rel="noopener">ABOUT</a>
@@ -294,50 +294,108 @@
 			}, 100);
 		})();
 
-		// Mobile drawer toggle — the tree sidebar becomes a slide-out
-		// overlay at <=760px. CSS hides #tree by default and reveals it
-		// when body has the `kd-mobile-tree-open` class. We toggle that
-		// class via the ≡ button in the header and dismiss it on backdrop
-		// click (the body::before pseudo-element area).
+		// Unified sidebar toggle — the ≡ button in the header drives the
+		// folder-tree on both desktop and mobile.
+		//   Desktop (>=761px): toggles `kd-tree-collapsed` on <html>.
+		//     CSS hides #tree and removes its left-column reservation
+		//     so wrap/widget/viz panel reclaim the space in flex flow.
+		//     State is persisted to localStorage `kd_tree_collapsed`.
+		//   Mobile (<=760px): toggles `kd-mobile-tree-open` on body.
+		//     CSS reveals #tree as a fixed slide-out drawer above wrap.
+		//     Backdrop click and Escape dismiss it.
 		(function () {
-			var btn = document.getElementById('kd-mobile-tree-toggle');
+			var btn = document.getElementById('kd-tree-toggle');
 			if (!btn) return;
-			var isOpen = function () {
-				return document.body.classList.contains('kd-mobile-tree-open');
+			var html = document.documentElement;
+			var body = document.body;
+			var mq = window.matchMedia('(max-width: 760px)');
+			var STORE_KEY = 'kd_tree_collapsed';
+
+			var isMobile = function () { return mq.matches; };
+			var isDrawerOpen = function () { return body.classList.contains('kd-mobile-tree-open'); };
+			var isCollapsed = function () { return html.classList.contains('kd-tree-collapsed'); };
+
+			var setCollapsed = function (v) {
+				html.classList.toggle('kd-tree-collapsed', !!v);
+				try { localStorage.setItem(STORE_KEY, v ? '1' : '0'); } catch (e) {}
 			};
-			var close = function () {
-				document.body.classList.remove('kd-mobile-tree-open');
+			var setDrawer = function (v) {
+				body.classList.toggle('kd-mobile-tree-open', !!v);
 			};
 			var toggle = function (e) {
 				if (e) { e.preventDefault(); e.stopPropagation(); }
-				document.body.classList.toggle('kd-mobile-tree-open');
+				if (isMobile()) setDrawer(!isDrawerOpen());
+				else setCollapsed(!isCollapsed());
 			};
 			btn.addEventListener('click', toggle);
-			// click outside the drawer (on the backdrop area) closes it.
-			// We listen on body and check if the click landed left of the
-			// drawer or to its right (below or above the drawer panel).
+
+			// restore desktop state from previous visit
+			try {
+				if (localStorage.getItem(STORE_KEY) === '1') setCollapsed(true);
+			} catch (e) {}
+
+			// mobile: backdrop click dismisses the drawer
 			document.addEventListener('click', function (e) {
-				if (!isOpen()) return;
+				if (!isDrawerOpen()) return;
 				var tree = document.getElementById('tree');
 				if (!tree) return;
 				if (tree.contains(e.target)) return;
 				if (e.target === btn || btn.contains(e.target)) return;
-				// backdrop click — swallow so the grid item / header link
-				// underneath does not also fire.
 				e.preventDefault();
 				e.stopPropagation();
-				close();
+				setDrawer(false);
 			}, true);
-			// pressing Escape closes the drawer
+			// Escape closes the mobile drawer
 			document.addEventListener('keydown', function (e) {
-				if (e.key === 'Escape' && isOpen()) close();
+				if (e.key === 'Escape' && isDrawerOpen()) setDrawer(false);
 			});
-			// if the user resizes from mobile to desktop, drop the class
-			// so the desktop tree layout reasserts itself cleanly.
-			var mq = window.matchMedia('(max-width: 760px)');
-			var onChange = function () { if (!mq.matches) close(); };
+			// resizing across the mobile breakpoint cleans up stale state
+			var onChange = function () {
+				if (!mq.matches) setDrawer(false);
+			};
 			if (mq.addEventListener) mq.addEventListener('change', onChange);
 			else if (mq.addListener) mq.addListener(onChange);
+		})();
+
+		// Move #path (the breadcrumb bar) to be the first child of #wrap
+		// so it scrolls with the folder grid, with `position: sticky;
+		// top: 0` keeping it pinned at wrap's top while the grid scrolls
+		// behind it. Upstream copyparty toggles path.display via JS as
+		// part of the tree open/close dance; kd-theme uses
+		// `display: flex !important` to keep it always visible.
+		(function () {
+			var sync = function () {
+				var path = document.getElementById('path');
+				var wrap = document.getElementById('wrap');
+				if (!path || !wrap) return false;
+				if (path.parentNode === wrap && wrap.firstChild === path) return true;
+				wrap.insertBefore(path, wrap.firstChild);
+				return true;
+			};
+			if (sync()) return;
+			var t = 0, w = setInterval(function () {
+				if (sync() || ++t > 50) clearInterval(w);
+			}, 100);
+		})();
+
+		// Force the folder tree to load on every startup. Upstream
+		// copyparty only fetches the tree when entreed is true (saved
+		// to localStorage as `entreed=tree`); if a user previously hit
+		// the now-removed 🍞 button, localStorage holds `entreed=na`
+		// and `r.detree()` runs at init — `get_tree()` is never called
+		// and the sidebar / mobile drawer stays empty. Calling entree
+		// with nostore=true triggers the data fetch without overwriting
+		// the user's preference for any of the now-defunct UI states.
+		(function () {
+			var go = function () {
+				if (typeof window.treectl === 'undefined' || typeof treectl.entree !== 'function') return false;
+				try { treectl.entree(null, true); } catch (e) {}
+				return true;
+			};
+			if (go()) return;
+			var t = 0, w = setInterval(function () {
+				if (go() || ++t > 50) clearInterval(w);
+			}, 100);
 		})();
 	</script>
 </body>

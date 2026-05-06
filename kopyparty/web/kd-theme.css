@@ -364,6 +364,23 @@ html#ht_brw.np_open #wrap {
     margin-bottom: calc(2 * var(--kd-gap) + var(--kd-widget-h)) !important;
 }
 
+/* Desktop sidebar collapse — when the hamburger sets html.kd-tree-collapsed,
+   hide the tree pane and let wrap, widget, viz panel reclaim the column.
+   Each rule mirrors the open-state value but with `var(--kd-gap)` in
+   place of `calc(var(--kd-tree-w) + 2 * var(--kd-gap))`. */
+html#ht_brw.kd-tree-collapsed #tree {
+    display: none !important;
+}
+html#ht_brw.kd-tree-collapsed #wrap {
+    margin-left: var(--kd-gap) !important;
+}
+html#ht_brw.kd-tree-collapsed #widget.open {
+    left: var(--kd-gap) !important;
+}
+html#ht_brw.kd-tree-collapsed #kd-viz-panel {
+    left: var(--kd-gap) !important;
+}
+
 /* ======================================================================
    splash page
    ====================================================================== */
@@ -471,22 +488,30 @@ html#ht_spl body {
     color: var(--fg);
 }
 
-/* breadcrumb path (#path) — mimic pdfarchive breadcrumb-nav */
+/* breadcrumb path (#path) — moved by browser.html script to be the
+   first child of #wrap so it scrolls with the folder grid. position:
+   sticky + top: 0 keeps it pinned at the top of wrap's scroll context.
+   Negative horizontal margins bleed across wrap's side padding so the
+   sticky bar reaches both rounded corners when pinned. `display: flex
+   !important` overrides upstream copyparty's JS which tries to hide
+   #path during tree open/close — we keep it always visible here. */
 #ht_brw #path {
-    margin: 1em 1.5em 0;
-    padding: .6em 1em;
-    background: linear-gradient(180deg, rgba(7, 24, 35, 0.9), rgba(3, 16, 24, 0.95));
-    border: 1px solid rgba(0, 255, 150, 0.18);
-    border-radius: 8px;
-    display: flex;
+    position: sticky !important;
+    top: 0;
+    z-index: 5;
+    margin: 0 -1.5em 1em -1.5em;
+    padding: .6em 1.5em;
+    background: linear-gradient(180deg, rgb(7, 24, 35), rgb(3, 16, 24));
+    border: none;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.18);
+    border-radius: 9px 9px 0 0;
+    display: flex !important;
     align-items: center;
     flex-wrap: wrap;
     gap: 4px;
     font-family: var(--font-mono);
     font-size: 1em;
-    box-shadow:
-        inset 0 0 20px rgba(0, 255, 150, 0.03),
-        0 4px 14px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5);
 }
 
 #ht_brw #path a {
@@ -561,9 +586,11 @@ html#ht_spl body {
 
 /* main listing panel (#wrap area with #files table). margins are
    defined in the viewport-fit block above (tied to --kd-gap and
-   --kd-tree-w); only padding/cosmetics live here. */
+   --kd-tree-w); only padding/cosmetics live here.
+   `padding-top: 0` so the sticky #path (now wrap's first child) hugs
+   the top edge of wrap when scrolled, with no peek-through gap. */
 #ht_brw #wrap {
-    padding: 1.2em 1.5em 1.5em;
+    padding: 0 1.5em 1.5em;
     background: linear-gradient(180deg, rgba(7, 24, 35, 0.85), rgba(3, 16, 24, 0.92));
     border: 1px solid rgba(0, 255, 150, 0.15);
     border-radius: 10px;
@@ -655,6 +682,12 @@ html#ht_spl body {
     /* border-box so width:280 accounts for the 1px borders, otherwise
        the rendered box is 282 and the gap to wrap shrinks by 2. */
     box-sizing: border-box !important;
+    /* desktop tree visibility is controlled exclusively by the
+       `html.kd-tree-collapsed` rule below — override any inline
+       `tree.style.display` that copyparty's r.hide()/r.show() may have
+       set (e.g. from a stale `entreed=na` localStorage value left over
+       from before this fork removed the 🌲/🍞 buttons). */
+    display: block !important;
 }
 
 /* the static "current path" panel (treepar) and the breadcrumb (treeh)
@@ -1931,9 +1964,33 @@ html#ht_rup #tw th {
 }
 
 /* ======================================================================
-   mobile-only menu button — hidden by default, only shown at <=760px
+   sidebar toggle — the hamburger ≡ in the header drives the tree on
+   both desktop (collapses sidebar in flex flow, wrap reclaims space)
+   and mobile (slide-out drawer overlay). Always visible.
    ====================================================================== */
 
+.kd-tree-toggle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    font-size: 18px !important;
+    padding: 4px 10px !important;
+}
+
+/* Upstream copyparty has its own tree open/close UI: 🌲 in #path and
+   the whole #treeh row (🍞 + zoom-in/out / 🎯 / 📃 / 📌 / a / ↵ / 👀
+   tree-config buttons). Our fork doesn't expose tree configuration —
+   the hamburger is the only control — so hide the entire #treeh row
+   along with #entree. */
+#ht_brw #entree,
+#ht_brw #treeh {
+    display: none !important;
+}
+
+/* keep .kd-mobile-only as a no-op alias so any other element using it
+   stays hidden by default — but the hamburger above no longer carries
+   this class, so that's already handled. */
 .kd-mobile-only {
     display: none !important;
 }
@@ -1973,7 +2030,9 @@ html#ht_rup #tw th {
         padding: 4px 8px;
     }
 
-    /* show mobile-only buttons (hamburger) */
+    /* legacy alias — hamburger is now driven by .kd-tree-toggle which
+       is always visible, so this rule is just a backstop for any other
+       element that might still use the old class. */
     .kd-mobile-only {
         display: inline-block !important;
     }
