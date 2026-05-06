@@ -613,16 +613,77 @@
         setTimeout(function () { tryPatchMpPreload(retries + 1); }, 100);
     }
 
+    // Strip video-only entries from `mp.order` after copyparty populates
+    // it. Upstream's `re_au_all` regex marks every video extension as a
+    // playable "audio source" so it can pipe the soundtrack through opus
+    // transcoding — but transcoding often fails (415) in this fork, and
+    // the user expectation is that the music player only deals with
+    // actual music files. After filtering, hide the widget if the
+    // current folder has zero audio AND nothing is loaded.
+    var VIDEO_EXT_RE = /\.(3gp|asf|av1|avc|avi|flv|h26[45]|hevc|m4v|mjpeg|mjpg|mkv|mov|mp4|mpeg|mpeg2|mpegts|mpg|mpg2|mts|nut|ogm|ogv|rm|ts|vob|webm|wmv)(\?|$)/i;
+
+    function isVideoTid(tid) {
+        if (!window.mp || !window.mp.tracks) return false;
+        var u = window.mp.tracks[tid];
+        if (!u || typeof u !== 'string') return false;
+        return VIDEO_EXT_RE.test(u);
+    }
+
+    function filterAudioOnly() {
+        if (!window.mp || !Array.isArray(mp.order)) return;
+        var changed = false;
+        var keep = [];
+        for (var i = 0; i < mp.order.length; i++) {
+            if (isVideoTid(mp.order[i])) { changed = true; continue; }
+            keep.push(mp.order[i]);
+        }
+        if (changed) mp.order = keep;
+    }
+
+    function maybeHideWidget() {
+        var widget = document.getElementById('widget');
+        if (!widget) return;
+        if (window.mp && window.mp.au) return;        // a track is loaded — keep widget
+        if (!window.mp || !Array.isArray(mp.order) || mp.order.length === 0) {
+            widget.classList.remove('open');
+            try { document.documentElement.classList.remove('np_open'); } catch (e) {}
+        }
+    }
+
+    function patchReadOrder() {
+        if (typeof window.mp !== 'object' || typeof mp.read_order !== 'function') return false;
+        if (mp._kdReadOrderPatched) return true;
+        var orig = mp.read_order;
+        mp.read_order = function () {
+            orig.apply(this, arguments);
+            filterAudioOnly();
+            maybeHideWidget();
+        };
+        mp._kdReadOrderPatched = true;
+        // run once for the initial state
+        filterAudioOnly();
+        maybeHideWidget();
+        return true;
+    }
+
+    function tryPatchReadOrder(retries) {
+        if (patchReadOrder()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryPatchReadOrder(retries + 1); }, 100);
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             tryInstall(0);
             tryPatchMpSetEv(0);
             tryPatchMpPreload(0);
+            tryPatchReadOrder(0);
         });
     } else {
         tryInstall(0);
         tryPatchMpSetEv(0);
         tryPatchMpPreload(0);
+        tryPatchReadOrder(0);
     }
 
     // Expose a few helpers for debugging from the console.
