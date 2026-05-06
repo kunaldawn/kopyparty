@@ -588,14 +588,41 @@
         setTimeout(function () { tryPatchMpSetEv(retries + 1); }, 100);
     }
 
+    // Hook `mp.preload` to skip its server-side waveform thumbnail
+    // prefetch (`?th=p`). The fork runs with `--no-thumb` so the server
+    // returns 404 and the browser logs an `ERR_ABORTED 404` for every
+    // track transition; the kd-chiptune side renders waveforms in-page
+    // via decodeAudioData so we never use the server PNGs anyway.
+    function patchMpPreload() {
+        if (typeof window.mp !== 'object' || typeof mp.preload !== 'function') return false;
+        if (mp._kdPreloadPatched) return true;
+        var orig = mp.preload;
+        mp.preload = function (url, full) {
+            var savedWaves = window.mpl && mpl.waves;
+            if (window.mpl) mpl.waves = false;
+            try { return orig.call(this, url, full); }
+            finally { if (window.mpl) mpl.waves = savedWaves; }
+        };
+        mp._kdPreloadPatched = true;
+        return true;
+    }
+
+    function tryPatchMpPreload(retries) {
+        if (patchMpPreload()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryPatchMpPreload(retries + 1); }, 100);
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             tryInstall(0);
             tryPatchMpSetEv(0);
+            tryPatchMpPreload(0);
         });
     } else {
         tryInstall(0);
         tryPatchMpSetEv(0);
+        tryPatchMpPreload(0);
     }
 
     // Expose a few helpers for debugging from the console.
