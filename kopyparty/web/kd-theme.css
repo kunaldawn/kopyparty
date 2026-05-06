@@ -1047,13 +1047,17 @@ html#ht_spl body {
 
 #ht_brw #kd-viz-panel {
     /* Pinned just above the music widget with matching insets so the
-       panel sits in the same horizontal column as wrap+widget. */
-    position: fixed;
-    bottom: calc(var(--kd-footer-h) + var(--kd-gap) + var(--kd-widget-h) + var(--kd-gap));
-    left: calc(var(--kd-tree-w) + 2 * var(--kd-gap));
-    right: var(--kd-gap);
+       panel sits in the same horizontal column as wrap+widget. !important
+       on margin/left/right overrides the inline browser.html sync script
+       that mirrors widget margins onto the viz panel — those margins are
+       calibrated for sticky positioning, not the fixed positioning we
+       use here, and would shift the panel off-axis. */
+    position: fixed !important;
+    bottom: calc(var(--kd-footer-h) + var(--kd-gap) + var(--kd-widget-h) + var(--kd-gap)) !important;
+    left: calc(var(--kd-tree-w) + 2 * var(--kd-gap)) !important;
+    right: var(--kd-gap) !important;
     z-index: 4;
-    margin: 0;
+    margin: 0 !important;
     box-sizing: border-box;
     height: 0;
     overflow: hidden;
@@ -1180,8 +1184,10 @@ html#ht_spl body {
 
 @media (max-width: 760px) {
     #ht_brw #kd-viz-panel {
-        margin: 0 0.6em 0;
-        bottom: calc(var(--kd-footer-h) + 88px + 8px); /* mobile widget = 88px */
+        margin: 0;
+        /* `bottom` is inherited from the desktop rule; with --kd-widget-h
+           bumped to 88px on mobile (in the chrome-vars block above) the
+           calc resolves correctly without a per-mobile override. */
     }
     #ht_brw #kd-viz-panel.kd-viz-open {
         height: 200px;
@@ -1988,8 +1994,8 @@ html#ht_rup #tw th {
         right: var(--kd-gap) !important;
     }
     html#ht_brw #kd-viz-panel {
-        left: var(--kd-gap);
-        right: var(--kd-gap);
+        left: var(--kd-gap) !important;
+        right: var(--kd-gap) !important;
     }
 
     #ht_brw #path,
