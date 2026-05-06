@@ -259,12 +259,17 @@
     Object.defineProperty(ChiptuneAudio.prototype, 'currentTime', {
         get: function () {
             var p = getPlayer();
-            if (!p.currentPlayingNode) return 0;
+            // chiptune2.onaudioprocess calls disconnect()+cleanup() (which
+            // sets modulePtr=0) but doesn't null currentPlayingNode. Without
+            // the modulePtr guard, libopenmpt floods the console with
+            // "module * not valid" every time copyparty's progress_updater
+            // polls currentTime after a track ends.
+            if (!p.currentPlayingNode || !p.currentPlayingNode.modulePtr) return 0;
             try { return p.getCurrentTime() || 0; } catch (e) { return 0; }
         },
         set: function (t) {
             var p = getPlayer();
-            if (p.currentPlayingNode && window.libopenmpt && libopenmpt._openmpt_module_set_position_seconds) {
+            if (p.currentPlayingNode && p.currentPlayingNode.modulePtr && window.libopenmpt && libopenmpt._openmpt_module_set_position_seconds) {
                 try { libopenmpt._openmpt_module_set_position_seconds(p.currentPlayingNode.modulePtr, t); }
                 catch (e) { console.warn('chiptune seek failed', e); }
             }
@@ -346,20 +351,45 @@
     // Route them to the currently active shim instance.
     var activeShim = null;
     var callbacksInstalled = false;
+    function endActive() {
+        // Null currentPlayingNode so the next currentTime poll bails out
+        // cleanly. chiptune2's onaudioprocess only calls disconnect()+
+        // cleanup() at natural end, leaving the node ref dangling with
+        // modulePtr=0.
+        var p = getPlayer();
+        if (p.currentPlayingNode) p.currentPlayingNode = null;
+        if (activeShim) {
+            activeShim._paused = true;
+            activeShim._stopTimer();
+            activeShim._fire('ended');
+        }
+    }
     function installPlayerCallbacks() {
         if (callbacksInstalled) return;
         callbacksInstalled = true;
         var p = getPlayer();
-        p.onEnded(function () {
-            if (activeShim) {
-                activeShim._paused = true;
-                activeShim._stopTimer();
-                activeShim._fire('ended');
-            }
-        });
+        p.onEnded(endActive);
         p.onError(function (info) {
+            // chiptune2 fires onError (type=='openmpt') when read returns
+            // 0 frames AND the module pointer is invalid — this is its way
+            // of signaling "song ended with a quirk." copyparty's
+            // evau_error schedules next_song with a 15-second toast; that
+            // makes a tracker module appear to "stop in between." Treat
+            // openmpt-type as a normal end so song advance is immediate.
+            // 'onxhr' (network) is a real error — keep that path.
+            if (info && info.type === 'openmpt') {
+                endActive();
+                return;
+            }
             if (activeShim) {
-                activeShim._error = { code: 4, message: 'libopenmpt: ' + (info && info.type) };
+                activeShim._error = {
+                    code: 4,  // MEDIA_ERR_DECODE-ish
+                    message: 'libopenmpt: ' + (info && info.type),
+                    MEDIA_ERR_ABORTED: 1,
+                    MEDIA_ERR_NETWORK: 2,
+                    MEDIA_ERR_DECODE: 3,
+                    MEDIA_ERR_SRC_NOT_SUPPORTED: 4
+                };
                 activeShim._fire('error');
             }
         });
@@ -624,42 +654,87 @@
 
     var drawposPatched = false;
 
+    // Mirror pbar's lastmove/mousepos closure state via our own listener
+    // on the position canvas. We can't read pbar's privates, but the
+    // canvas mousemove still bubbles to addEventListener-attached handlers
+    // even when pbar reassigns onmousemove on every mouseenter.
+    var kdLastMove = 0, kdMousePos = 0;
+    function attachHoverTracker() {
+        if (!window.pbar || !window.pbar.pos || !window.pbar.pos.can) return;
+        var can = window.pbar.pos.can;
+        if (can._kdHoverHooked) return;
+        can._kdHoverHooked = true;
+        can.addEventListener('mousemove', function (e) {
+            if (e.buttons || !window.mp || !window.mp.au) return;
+            var d = window.mp.au.duration;
+            if (!isFinite(d)) return;
+            var rect = can.getBoundingClientRect();
+            kdMousePos = d * (e.clientX - rect.left) / rect.width;
+            kdLastMove = Date.now();
+        });
+        can.addEventListener('mouseleave', function () {
+            kdLastMove = 0;
+        });
+    }
+
     function patchDrawpos() {
         if (drawposPatched) return true;
         if (!window.pbar || typeof window.pbar.drawpos !== 'function') return false;
         if (typeof window.s2ms !== 'function') return false;
 
-        var orig = window.pbar.drawpos;
+        attachHoverTracker();
+
+        // Replace pbar.drawpos entirely so we can position labels at
+        // y = h*0.667 (matching vbar) AND draw the position marker
+        // exactly once at the correct x — full-height. The original is
+        // structurally fine but draws labels at y=h*0.94 which doesn't
+        // line up with the volume canvas. Layering on top of orig caused
+        // a "split marker" because the hover state lives in pbar's
+        // closure and we'd redraw the marker at currentTime while orig
+        // had drawn it at mousepos.
+        var t_redraw = 0;
         window.pbar.drawpos = function () {
-            orig.apply(this, arguments);
             try {
-                if (!window.mp || !window.mp.au) return;
-                var pc = window.pbar.pos;
-                var bc = window.pbar.buf;
-                if (!pc || !pc.ctx || !bc) return;
-                var apos = window.mp.au.currentTime;
-                var adur = window.mp.au.duration;
-                if (!isFinite(adur) || !isFinite(apos) || apos < 0 || adur < apos) return;
-                if (!window.widget || !window.widget.is_open) return;
-
+                if (t_redraw) { clearTimeout(t_redraw); t_redraw = 0; }
+                var pbar = window.pbar;
+                if (!pbar || !pbar.pos) return;
+                var pc = pbar.pos, bc = pbar.buf;
                 var pctx = pc.ctx;
-                // Erase bottom-third strip where copyparty drew text at y=h*0.94
-                var stripY = Math.floor(pc.h * 0.7);
-                var stripH = pc.h - stripY;
-                pctx.clearRect(0, stripY, pc.w, stripH);
+                pctx.clearRect(0, 0, pc.w, pc.h);
+                if (!window.mp || !window.mp.au) return;
 
-                // Re-draw the position cursor in the strip we just cleared
+                var adur = window.mp.au.duration;
+                var apos = window.mp.au.currentTime;
+                if (!isFinite(adur) || !isFinite(apos) || apos < 0 || adur < apos) {
+                    if (Date.now() - (window.mp.au.pt0 || 0) < 500) return;
+                    pctx.fillStyle = window.light ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)';
+                    var rsrc = '' + (window.mp.au.rsrc || '');
+                    var m = /[?&]th=(opus|owa|caf|mp3)/.exec(rsrc);
+                    var L = window.L || {};
+                    var txt = window.mp.au.ded ? (L.mm_playerr || '').replace(':', ' ;_;') :
+                        m ? (L.mm_bconv || '').replace('{0}', m[1]) : (L.mm_bload || '');
+                    pctx.fillText(txt, 16, pc.h / 1.5);
+                    return;
+                }
+
+                if (!window.widget || !window.widget.is_open) return;
+                if (!bc) return;
+
+                // hover override (matches pbar's own logic)
+                var w = 8;
+                if (kdLastMove && Date.now() - kdLastMove < 400) {
+                    apos = kdMousePos;
+                    w = 0;
+                }
+
                 var sm = bc.w * 1.0 / adur;
                 var x = sm * apos;
-                var cw = 8;
-                pctx.fillStyle = '#573'; pctx.fillRect((x - cw / 2) - 1, stripY, cw + 2, stripH);
-                pctx.fillStyle = '#dfc'; pctx.fillRect((x - cw / 2), stripY, cw, stripH);
 
-                // Re-draw the time labels at y = h*2/3 (same as volume).
-                // Match vbar.draw's font size (.7em) so both labels are the
-                // same visual height and the baselines line up. The
-                // upstream pbar uses .9em which made time labels noticeably
-                // taller than 'volume NN'.
+                // marker — full height (matches upstream)
+                pctx.fillStyle = '#573'; pctx.fillRect((x - w / 2) - 1, 0, w + 2, pc.h);
+                pctx.fillStyle = '#dfc'; pctx.fillRect((x - w / 2), 0, w, pc.h);
+
+                // time labels at y = h*2/3 (vbar's text y, kd-theme tweak)
                 pctx.font = '.7em sans-serif';
                 pctx.fillStyle = '#fff';
                 pctx.strokeStyle = 'rgba(24,56,0,0.5)';
@@ -679,9 +754,12 @@
                 pctx.strokeText(t2, xt2, yt);
                 pctx.fillText(t1, xt1, yt);
                 pctx.fillText(t2, xt2, yt);
+
+                // self-reschedule to keep cursor smooth (matches upstream)
+                if (sm > 10)
+                    t_redraw = setTimeout(window.pbar.drawpos, sm > 50 ? 20 : 50);
             } catch (e) {
-                // never let the patch crash the original drawpos
-                console.warn('kd-chiptune drawpos patch error:', e);
+                console.warn('kd-chiptune drawpos error:', e);
             }
         };
         drawposPatched = true;

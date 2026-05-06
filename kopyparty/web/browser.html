@@ -179,6 +179,29 @@
 		jsldp("J_U2K","up2k");
 	</script>
 	<script>
+		// Measure the real header & footer heights and feed them into
+		// the layout via CSS custom properties. Static fallbacks in
+		// kd-theme.css are close but never exact (font metrics, line
+		// wrapping at narrow widths) — measuring at runtime keeps the
+		// header→tree, footer→tree, footer→widget gaps pixel-perfect.
+		(function () {
+			var sync = function () {
+				var h = document.querySelector('.kd-header');
+				var f = document.querySelector('.kd-footer');
+				if (h) document.documentElement.style.setProperty(
+					'--kd-header-h', Math.round(h.getBoundingClientRect().height) + 'px');
+				if (f) document.documentElement.style.setProperty(
+					'--kd-footer-h', Math.round(f.getBoundingClientRect().height) + 'px');
+			};
+			sync();
+			window.addEventListener('resize', sync);
+			document.addEventListener('DOMContentLoaded', sync);
+			if (document.fonts && document.fonts.ready) document.fonts.ready.then(sync);
+			setTimeout(sync, 100);
+			setTimeout(sync, 500);
+			setTimeout(sync, 1500);
+		})();
+
 		(function () {
 			var vp = location.pathname.replace(/\/+$/, '');
 			var tries = 0;

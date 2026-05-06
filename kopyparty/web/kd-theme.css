@@ -95,8 +95,26 @@ html[class] {
     /* heights of the sticky chrome — used to offset the music widget and
        to leave breathing room at the bottom of the scroll content. Update
        both values together with footer/widget paddings. */
+    --kd-header-h: 65px;
     --kd-footer-h: 39px;
     --kd-widget-h: 64px;
+
+    /* `--kd-widget-h-active` toggles to `--kd-widget-h` on `html.np_open`
+       (set by copyparty when the player widget is visible). Used by the
+       wrap pane to leave space for the widget so its last row sits above
+       the player instead of behind it. */
+    --kd-widget-h-active: 0px;
+
+    /* Symmetric layout — every gap between body chrome (header/footer/
+       sidebar/folder/widget) is exactly `--kd-gap`, and the tree sidebar
+       is pinned to a fixed width. Wrap margin-left = tree-w + 2*gap so
+       sidebar and folder share the same gap on both sides. */
+    --kd-gap: 16px;
+    --kd-tree-w: 280px;
+}
+
+html.np_open {
+    --kd-widget-h-active: var(--kd-widget-h);
 }
 
 /* ======================================================================
@@ -287,21 +305,52 @@ body::after {
     display: none !important;
 }
 
-/* pin footer to viewport bottom — body as flex column */
-html#ht_brw body,
+/* splash page keeps page-scroll layout (long help text) */
 html#ht_spl body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
 }
 
-html#ht_brw #wrap {
-    flex: 1 0 auto;
-    min-height: 0;
-}
-
 html#ht_spl #wrap {
     flex: 1 0 auto;
+}
+
+/* browser page becomes viewport-fit — header & footer pin without page
+   scroll, the tree sidebar and the wrap (folder view) get their own
+   scrollbars. This way long file lists / deep trees never push the chrome
+   off-screen. */
+html#ht_brw,
+html#ht_brw body {
+    height: 100vh !important;
+    min-height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+
+html#ht_brw body {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* `#wrap` is the folder-view pane. flex:1 1 auto + min-height:0 + overflow-y:auto
+   make it the only vertical scroll surface in the browser page. Margins
+   produce symmetric gaps with the tree on the left and the viewport
+   edge on the right; bottom margin grows by widget height when a track
+   is playing (so the last grid row never hides behind the player). */
+html#ht_brw #wrap {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    margin-top: var(--kd-gap) !important;
+    margin-right: var(--kd-gap) !important;
+    margin-bottom: var(--kd-gap) !important;
+    margin-left: calc(var(--kd-tree-w) + 2 * var(--kd-gap)) !important;
+}
+
+html#ht_brw.np_open #wrap {
+    margin-bottom: calc(2 * var(--kd-gap) + var(--kd-widget-h)) !important;
 }
 
 /* ======================================================================
@@ -499,10 +548,11 @@ html#ht_spl body {
     max-width: none;
 }
 
-/* main listing panel (#wrap area with #files table) */
+/* main listing panel (#wrap area with #files table). margins are
+   defined in the viewport-fit block above (tied to --kd-gap and
+   --kd-tree-w); only padding/cosmetics live here. */
 #ht_brw #wrap {
-    margin: 1em 1.5em 0;
-    padding: 1.2em 1.5em 3em;
+    padding: 1.2em 1.5em 1.5em;
     background: linear-gradient(180deg, rgba(7, 24, 35, 0.85), rgba(3, 16, 24, 0.92));
     border: 1px solid rgba(0, 255, 150, 0.15);
     border-radius: 10px;
@@ -567,9 +617,12 @@ html#ht_spl body {
     font-size: inherit;
 }
 
-/* left tree sidebar — keep above the footer.
-   copyparty's JS sets inline `height` on #tree; we need height:auto !important
-   so the `bottom` value actually applies and the panel stops above the footer. */
+/* left tree sidebar — fixed pane spanning between sticky header and
+   sticky footer with its own internal scrollbar. The sidebar fills the
+   full vertical space (sits beside the widget, not above it) so the
+   panel never visually shrinks when a track plays. copyparty's
+   treectl.js sets inline position/top/height/width on #tree as the page
+   scrolls; we override with !important to anchor the pane. */
 #ht_brw #tree {
     background: var(--tree-bg);
     border: 1px solid rgba(0, 255, 150, 0.18);
@@ -579,10 +632,30 @@ html#ht_spl body {
         0 0 24px rgba(0, 255, 150, 0.05),
         inset 0 1px 0 rgba(255, 255, 255, 0.02);
     font-family: var(--font-mono) !important;
-    left: 0.5em !important;
-    bottom: 3.5em !important;
+    position: fixed !important;
+    top: calc(var(--kd-header-h) + var(--kd-gap)) !important;
+    bottom: calc(var(--kd-footer-h) + var(--kd-gap)) !important;
+    left: var(--kd-gap) !important;
+    width: var(--kd-tree-w) !important;
     height: auto !important;
-    overflow: hidden !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    /* border-box so width:280 accounts for the 1px borders, otherwise
+       the rendered box is 282 and the gap to wrap shrinks by 2. */
+    box-sizing: border-box !important;
+}
+
+/* the static "current path" panel (treepar) and the breadcrumb (treeh)
+   need a solid background so they don't show grid items behind them when
+   the tree pane is internally scrolled. */
+#ht_brw #treeh,
+#ht_brw #treepar {
+    position: sticky !important;
+    z-index: 2;
+}
+#ht_brw #treeh {
+    top: 0;
 }
 
 #ht_brw #treeh,
@@ -755,29 +828,24 @@ html#ht_spl body {
 
 #ht_brw #widget.open {
     display: block !important;
-    /* sticky just above the sticky footer — stays visible while the file
-       grid scrolls behind. The widget is a body flex child placed before
-       the footer in source order, so sticky bottom positions it cleanly
-       above the footer without overlapping. */
-    position: sticky !important;
-    left: auto !important;
-    right: auto !important;
+    /* Pinned to the viewport just above the footer with the same
+       horizontal insets as the wrap pane, so widget width = folder-view
+       width (and gaps on every side equal --kd-gap). Position fixed
+       (not sticky) keeps it locked regardless of any scroll context. */
+    position: fixed !important;
     top: auto !important;
-    bottom: var(--kd-footer-h) !important;
+    bottom: calc(var(--kd-footer-h) + var(--kd-gap)) !important;
+    left: calc(var(--kd-tree-w) + 2 * var(--kd-gap)) !important;
+    right: var(--kd-gap) !important;
     width: auto !important;
-    height: auto !important;
-    /* margin left/right are set dynamically by browser.html's inline script
-       to match `#wrap`'s computed left/right insets (margin + padding) so the
-       player aligns pixel-perfect with the file grid content, accounting for
-       the tree sidebar state. Non-important so JS can override. */
-    margin-top: 0 !important;
-    margin-bottom: 0.4em !important;
-    margin-right: 1.5em;
-    margin-left: 1.5em;
+    height: var(--kd-widget-h) !important;
+    /* zero out the margins; the inline browser.html sync script may
+       still set margin-left/right but on a fixed element with explicit
+       left/right, margins don't reposition the element. */
+    margin: 0 !important;
     padding: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
-    flex-shrink: 0 !important;
     z-index: 4 !important;
     font-size: 1em !important;
 }
@@ -978,12 +1046,14 @@ html#ht_spl body {
    ====================================================================== */
 
 #ht_brw #kd-viz-panel {
-    /* Sticky-bottom, pinned just above the music widget so the panel
-       always sits in the same vertical slot regardless of scroll. */
-    position: sticky;
-    bottom: calc(var(--kd-footer-h) + var(--kd-widget-h) + 8px);
+    /* Pinned just above the music widget with matching insets so the
+       panel sits in the same horizontal column as wrap+widget. */
+    position: fixed;
+    bottom: calc(var(--kd-footer-h) + var(--kd-gap) + var(--kd-widget-h) + var(--kd-gap));
+    left: calc(var(--kd-tree-w) + 2 * var(--kd-gap));
+    right: var(--kd-gap);
     z-index: 4;
-    margin: 0 1.5em 0;
+    margin: 0;
     box-sizing: border-box;
     height: 0;
     overflow: hidden;
@@ -997,14 +1067,12 @@ html#ht_spl body {
         0 0 36px rgba(0, 255, 150, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.04);
     transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                margin-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1),
                 box-shadow 0.3s ease;
     pointer-events: none;
 }
 
 #ht_brw #kd-viz-panel.kd-viz-open {
     height: 280px;
-    margin-bottom: 8px;
     pointer-events: auto;
 }
 
@@ -1789,32 +1857,60 @@ html#ht_rup #tw th {
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
-    background: rgba(0, 0, 0, 0.35);
+    background: linear-gradient(180deg, rgba(7, 24, 35, 0.85), rgba(3, 16, 24, 0.95));
 }
 
 ::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(0, 255, 150, 0.05);
+    background:
+        linear-gradient(180deg, rgba(7, 24, 35, 0.85), rgba(3, 16, 24, 0.95)),
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 255, 150, 0.04) 0px,
+            rgba(0, 255, 150, 0.04) 1px,
+            transparent 1px,
+            transparent 4px
+        );
+    border-left: 1px solid rgba(0, 255, 150, 0.12);
+    border-right: 1px solid rgba(0, 255, 150, 0.05);
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.5);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(0, 255, 150, 0.25);
+    background:
+        linear-gradient(180deg, rgba(0, 255, 150, 0.55), rgba(0, 255, 150, 0.22));
     border-radius: 5px;
-    border: 1px solid rgba(0, 255, 150, 0.1);
+    border: 1px solid rgba(0, 255, 150, 0.45);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+        0 0 6px rgba(0, 255, 150, 0.18);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 255, 150, 0.5);
-    box-shadow: 0 0 6px rgba(0, 255, 150, 0.35);
+    background:
+        linear-gradient(180deg, rgba(0, 255, 150, 0.85), rgba(0, 255, 150, 0.45));
+    border-color: var(--a);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 0 12px rgba(0, 255, 150, 0.55);
+}
+
+::-webkit-scrollbar-thumb:active {
+    background:
+        linear-gradient(180deg, var(--a-hil), var(--a));
+    box-shadow:
+        0 0 16px rgba(0, 255, 150, 0.7),
+        inset 0 0 6px rgba(255, 255, 255, 0.18);
 }
 
 ::-webkit-scrollbar-corner {
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(3, 16, 24, 0.95);
 }
 
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(0, 255, 150, 0.3) rgba(0, 0, 0, 0.35);
+    scrollbar-color: rgba(0, 255, 150, 0.45) rgba(3, 16, 24, 0.85);
 }
 
 /* ======================================================================
@@ -1830,9 +1926,20 @@ html#ht_rup #tw th {
    ====================================================================== */
 
 @media (max-width: 760px) {
-    /* tighter footer at narrow widths — keep --kd-footer-h in sync */
-    :root {
+    /* tighter chrome at narrow widths — keep header/footer h-vars in sync.
+       Widget grows to 88px because the mobile two-row layout (pctl+pvol
+       on top, progress bar below) needs more vertical room. The selector
+       matches the base rule above (`html[class]` etc.) so the @media
+       overrides actually win in specificity. */
+    html,
+    html.a,
+    html.y,
+    html.z,
+    html.bz,
+    html[class] {
+        --kd-header-h: 51px;
         --kd-footer-h: 33px;
+        --kd-widget-h: 88px;
     }
 
     .kd-header {
@@ -1865,37 +1972,52 @@ html#ht_rup #tw th {
         overflow-x: hidden;
     }
 
-    /* override JS-set inline `wrap.style.marginLeft: 21em`. With the tree
-       turned into a slide-out drawer, the wrap reclaims the full viewport. */
-    #ht_brw #wrap {
-        margin-left: 0 !important;
-        margin-right: 0 !important;
+    /* mobile: tree is a slide-out drawer, so wrap takes the full width
+       (gap on each viewport edge) and the player widget anchors directly
+       below it without leaving room for the sidebar. */
+    html#ht_brw #wrap {
+        margin-left: var(--kd-gap) !important;
+        margin-right: var(--kd-gap) !important;
         padding-left: 0.7em !important;
         padding-right: 0.7em !important;
+    }
+
+    /* widget + viz panel match wrap horizontally on mobile */
+    html#ht_brw #widget.open {
+        left: var(--kd-gap) !important;
+        right: var(--kd-gap) !important;
+    }
+    html#ht_brw #kd-viz-panel {
+        left: var(--kd-gap);
+        right: var(--kd-gap);
     }
 
     #ht_brw #path,
     #ht_brw #ops,
     #ht_brw .opview.act {
-        margin-left: 0.6em;
-        margin-right: 0.6em;
+        margin-left: var(--kd-gap);
+        margin-right: var(--kd-gap);
     }
 
     /* tree → fixed-position slide-out drawer.
-       Hidden by default; .kd-mobile-tree-open on body reveals it. */
+       Hidden by default; .kd-mobile-tree-open on body reveals it.
+       Drawer fills full vertical space (between header and footer) like
+       desktop, so the bottom edge sits just above the footer regardless
+       of widget visibility. */
     #ht_brw #tree {
         display: none !important;
         position: fixed !important;
-        top: 65px !important; /* clear the sticky kd-header */
+        top: calc(var(--kd-header-h) + var(--kd-gap)) !important;
         left: 0 !important;
-        bottom: var(--kd-footer-h) !important;
+        bottom: calc(var(--kd-footer-h) + var(--kd-gap)) !important;
         right: auto !important;
         width: min(85vw, 320px) !important;
         height: auto !important;
         max-height: none !important;
         z-index: 50 !important;
         box-shadow: 6px 0 30px rgba(0, 0, 0, 0.6);
-        overflow: auto !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
     }
     #ht_brw body.kd-mobile-tree-open #tree {
         display: block !important;
@@ -1904,7 +2026,7 @@ html#ht_rup #tw th {
     #ht_brw body.kd-mobile-tree-open::before {
         content: "";
         position: fixed;
-        top: 65px;
+        top: var(--kd-header-h);
         left: min(85vw, 320px);
         right: 0;
         bottom: var(--kd-footer-h);
@@ -1917,11 +2039,12 @@ html#ht_rup #tw th {
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
     }
 
-    /* the widget's inline-set margins from browser.html's sync routine can
-       push controls outside narrow viewports — clamp to viewport edges */
+    /* widget is position:fixed with left/right anchored to var(--kd-gap)
+       in the mobile @media block above; the inline-set margins from
+       browser.html's sync routine are non-functional on a fixed element
+       with explicit insets, but we zero them anyway for cleanliness. */
     #ht_brw #widget.open {
-        margin-left: 0.6em !important;
-        margin-right: 0.6em !important;
+        margin: 0 !important;
     }
 
     /* Two-row widget layout on mobile, with symmetric 8px gutters:
