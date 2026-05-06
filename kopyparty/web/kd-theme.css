@@ -1454,7 +1454,7 @@ html#ht_spl body {
     min-height: 18px;
 }
 #ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-cols,
-#ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-body-wrap {
+#ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-body {
     display: none;
 }
 
@@ -1554,7 +1554,7 @@ html#ht_spl body {
 }
 #ht_brw #kd-tracker .kd-tracker-cols .cell {
     flex: 0 0 auto;
-    width: 7em;              /* matches body cell width */
+    width: 8.2em;            /* matches body cell width */
     text-align: center;
     border-right: 1px solid rgba(0, 255, 150, 0.08);
 }
@@ -1562,46 +1562,23 @@ html#ht_spl body {
     border-right: none;
 }
 
-/* body wrapper — clips overflow and hosts the fixed-position cursor
-   overlay so the play-head bar stays visually pinned to the centre
-   while pattern rows scroll under it (Furnace's exact behaviour). */
-#ht_brw #kd-tracker .kd-tracker-body-wrap {
-    flex: 1 1 auto;
-    position: relative;
-    overflow: hidden;
-}
-
-/* fixed centred play-head — Furnace's PATTERN_PLAY_HEAD = white 25 %.
-   Lives outside the scroll container so it never moves while the
-   rows below it slide. */
-#ht_brw #kd-tracker .kd-tracker-cursor {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 1.4em;          /* matches body line-height */
-    transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.16);
-    border-top: 1px solid rgba(255, 255, 255, 0.28);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.28);
-    pointer-events: none;
-    z-index: 2;
-}
-
 /* body — vertical scroll for rows, horizontal scroll for many-channel
-   modules. All scrollbars are hidden on every surface so nothing
-   jitters during the per-row centring. */
+   modules. The currently playing row gets `.row.current` and a white-25%
+   background tint (Furnace's `PATTERN_PLAY_HEAD`); JS scrolls the body
+   so that row sits at the visual centre, exactly mirroring Furnace's
+   `pattern.cpp:130-131` (TableSetBgColor on the playing row). Vertical
+   padding is set inline by JS to (bodyH - rowH) / 2 so the play-head
+   centres even at the start / end of the [prev|cur|next] tape — CSS
+   percentage padding can't be used since vertical % padding resolves
+   against the parent's *width*, not height. */
 #ht_brw #kd-tracker .kd-tracker-body {
-    position: absolute;
-    inset: 0;
+    flex: 1 1 auto;
     overflow: auto;
     font-family: var(--font-mono);
     font-size: 0.72em;
     line-height: 1.4;
     color: var(--fg-weak);
-    padding: calc(50% - 0.7em) 0;   /* room above & below so any row can centre */
     scrollbar-width: none;
-    z-index: 1;
 }
 #ht_brw #kd-tracker .kd-tracker-body::-webkit-scrollbar {
     display: none;
@@ -1615,22 +1592,34 @@ html#ht_spl body {
     white-space: nowrap;
 }
 
-/* Beat highlights — match Furnace's defaults from guiConst.cpp:
-   PATTERN_HI_1 (every 4th row): rgba(0.6,0.6,0.6,0.2) ≈ light grey
-   PATTERN_HI_2 (every 16th row): rgba(0.5,0.8,1.0,0.2) ≈ light blue */
+/* Beat highlights — exact alphas from guiConst.cpp:
+   PATTERN_HI_1 (every 4th row): rgba(0.6,0.6,0.6,0.2)
+   PATTERN_HI_2 (every 16th row): rgba(0.5,0.8,1.0,0.2) */
 #ht_brw #kd-tracker .row.beat-1 {
-    background: rgba(153, 153, 153, 0.10);
+    background: rgba(153, 153, 153, 0.20);
 }
 #ht_brw #kd-tracker .row.beat-2 {
-    background: rgba(128, 204, 255, 0.14);
+    background: rgba(128, 204, 255, 0.20);
 }
 
-/* Currently playing row — the actual highlight is rendered by the
-   fixed `.kd-tracker-cursor` overlay above. We just nudge the row's
-   text so it reads cleanly against the white-translucent bar. */
+/* Currently playing row — Furnace's PATTERN_PLAY_HEAD = #FFFFFF @ 25 %.
+   This is the play-head bar itself; JS centres the row vertically so
+   it always reads as a fixed bar. Beat tints below sit underneath
+   thanks to the order in which class rules are layered (we want the
+   play-head to win over beat-1 / beat-2). */
+#ht_brw #kd-tracker .row.current {
+    background: rgba(255, 255, 255, 0.25) !important;
+}
 #ht_brw #kd-tracker .row.current .cell i,
 #ht_brw #kd-tracker .row.current .rowidx {
     text-shadow: 0 0 5px rgba(255, 255, 255, 0.45);
+}
+
+/* Rows belonging to the *previous* or *next* order's pattern, drawn
+   above & below the current pattern in the tape. Furnace softly dims
+   these so the eye stays on the active pattern. */
+#ht_brw #kd-tracker .row.ord-other {
+    opacity: 0.55;
 }
 
 /* Row index — Furnace's PATTERN_ROW_INDEX = #80CCFF (light blue) */
@@ -1643,10 +1632,13 @@ html#ht_spl body {
     border-right: 1px solid rgba(128, 204, 255, 0.18);
 }
 
-/* per-channel cell — fixed width grid so columns line up vertically */
+/* per-channel cell — fixed width grid so columns line up vertically.
+   Holds 5 sub-fields: note (3 char) + inst (2) + vol (2) + fxt (2) +
+   fxp (2) = 11 mono chars + 4 inter-field gaps. 8.2em comfortably fits
+   at 0.72em font-size. */
 #ht_brw #kd-tracker .cell {
     flex: 0 0 auto;
-    width: 7em;
+    width: 8.2em;
     padding: 0 3px;
     border-right: 1px solid rgba(255, 255, 255, 0.06);
     white-space: pre;
@@ -1666,10 +1658,11 @@ html#ht_spl body {
     letter-spacing: 0;
 }
 #ht_brw #kd-tracker .cell i:last-child { margin-right: 0; }
-#ht_brw #kd-tracker .cell i.note     { color: #ffffff; font-weight: 700; }
-#ht_brw #kd-tracker .cell i.inst     { color: #66b3ff; }
-#ht_brw #kd-tracker .cell i.volume   { color: #00ff00; }   /* fallback when JS shade missing */
-#ht_brw #kd-tracker .cell i.inactive { color: rgba(255, 255, 255, 0.22); }
+#ht_brw #kd-tracker .cell i.note         { color: #ffffff; font-weight: 700; }
+#ht_brw #kd-tracker .cell i.note-special { color: #c0c0c0; font-weight: 700; }  /* ^^^ / === */
+#ht_brw #kd-tracker .cell i.inst         { color: #66b3ff; }
+#ht_brw #kd-tracker .cell i.volume       { color: #00ff00; }   /* fallback when JS shade missing */
+#ht_brw #kd-tracker .cell i.inactive     { color: rgba(255, 255, 255, 0.22); }
 
 /* effect-type categories (mirrored from guiConst.cpp default colors).
    The "fx" base class only exists alongside one of these modifiers,
@@ -1706,7 +1699,7 @@ html#ht_spl body {
         padding: 2px 4px 1px;
     }
     #ht_brw #kd-tracker .kd-tracker-cols .cell {
-        width: 5.5em;
+        width: 6.6em;
     }
     #ht_brw #kd-tracker .kd-tracker-body {
         font-size: 0.62em;
@@ -1716,7 +1709,7 @@ html#ht_spl body {
         padding-right: 3px;
     }
     #ht_brw #kd-tracker .cell {
-        width: 5.5em;
+        width: 6.6em;
         padding: 0 2px;
     }
     #ht_brw #kd-tracker .cell i {
