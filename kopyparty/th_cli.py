@@ -49,7 +49,7 @@ class ThumbCli(object):
     def log(self, msg: str, c: Union[int, str] = 0) -> None:
         self.log_func("thumbcli", msg, c)
 
-    def get(self, dbv: VFS, rem: str, mtime: float, fmt: str) -> Optional[str]:
+    def get(self, dbv: VFS, rem: str, mtime: float, fmt: str, cache_only: bool = False) -> Optional[str]:
         ptop = dbv.realpath
         ext = rem.rsplit(".")[-1].lower()
         if ext not in self.thumbable or "dthumb" in dbv.flags:
@@ -161,6 +161,16 @@ class ThumbCli(object):
             return ret
 
         if abort:
+            return None
+
+        # kopyparty fork: when called from the frontend HTTP handler
+        # (cache_only=True), never trigger on-demand generation. The
+        # cache is populated exclusively by the background pregen worker
+        # (--th-pregen) which calls this method with cache_only=False.
+        # Frontend cache misses fall through to the SVG icon in
+        # httpcli's tx_ico — the user sees the real thumbnail on next
+        # navigation once pregen has reached the file.
+        if cache_only:
             return None
 
         ap = os.path.join(ptop, rem)

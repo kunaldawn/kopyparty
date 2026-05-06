@@ -3906,7 +3906,12 @@ class HttpCli(object):
                 thp = None
                 if self.thumbcli and not nothumb:
                     try:
-                        thp = self.thumbcli.get(dbv, vrem, int(st.st_mtime), th_fmt)
+                        # cache_only=True: kopyparty fork forbids on-demand
+                        # thumbnail generation. The cache is populated
+                        # exclusively by the --th-pregen background worker
+                        # at startup; frontend requests serve cached thumbs
+                        # or fall back to the SVG icon below.
+                        thp = self.thumbcli.get(dbv, vrem, int(st.st_mtime), th_fmt, cache_only=True)
                     except Pebkac as ex:
                         if ex.code == 500 and th_fmt[:1] in "jw":
                             self.log("failed to convert [%s]:\n%s" % (abspath, ex), 3)

@@ -7,19 +7,44 @@ services:
       - "${KOPYPARTY_PORT:-8282}:3923"
     volumes:
       - ${KOPYPARTY_DATA_DIR:-./srv}:/data:ro
+      # /cache holds the thumbnail cache (.hist tree). Source is mounted
+      # read-only, so kopyparty would otherwise fail to write thumbs into
+      # each volume's default `.hist` folder. --hist points the histpath
+      # to this writable named volume instead.
+      - kopyparty_cache:/cache
     mem_limit: ${KOPYPARTY_MEM_LIMIT:-2g}
     memswap_limit: ${KOPYPARTY_MEM_LIMIT:-2g}
     environment:
       - TZ=${TZ:-UTC}
     command:
       - --no-crt
-      - --no-thumb
       - --grid
       - --kd-header=${KOPYPARTY_HEADER:-KD's Homebrew Data Archive}
       - --kd-footer=${KOPYPARTY_FOOTER:-Served offline via KD's Homebrew Data Archive}
+      # ----- thumbnails: pregen at startup, never expire, never on-demand -----
+      # --hist redirects all per-volume databases + thumbnail caches into
+      # /cache (so the read-only source mount stays intact).
+      - --hist=/cache
+      # -e2dsa scans every volume on startup, populating the file index
+      # which --th-pregen then walks to generate thumbnails.
+      - -e2dsa
+      # --th-pregen formats: jpg/webp + cropped + 3x variants. The list
+      # matches what the grid view requests via ?th=j / ?th=w&th3 etc.
+      - --th-pregen=j,jf,w,w3,wf,wf3
+      # ratelimit pregen log spam to one line every 5 seconds
+      - --th-pre-rl=5
+      # never expire / clean up the cache (rebuild image if you need to
+      # rotate the thumbnail set explicitly).
+      - --th-maxage=999999999
+      - --th-clean=0
+      # use 1 worker thread for pregen so logs stay readable on first run
+      - -j1
       - -i
       - 0.0.0.0
       - -p
       - "3923"
       - -v
       - /data::r
+
+volumes:
+  kopyparty_cache:
