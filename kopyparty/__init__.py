@@ -84,6 +84,7 @@ web/deps/scp.woff2
 web/iiam.gif
 web/kd-chiptune.js
 web/kd-theme.css
+web/kd-tracker.js
 web/kd-visualizer.js
 web/md.css
 web/md.html

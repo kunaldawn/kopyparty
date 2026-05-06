@@ -1404,6 +1404,326 @@ html#ht_spl body {
     opacity: 0.75;
 }
 
+/* ======================================================================
+   chiptune pattern view (Furnace-style)
+   shown only while a tracker module is playing — kd-tracker.js manages
+   visibility via the `.kd-tracker-on` class.
+   ====================================================================== */
+
+/* hidden by default; .kd-tracker-on toggles visibility */
+#ht_brw #kd-tracker {
+    display: none;
+}
+#ht_brw #kd-tracker.kd-tracker-on {
+    display: flex;
+    flex-direction: column;
+}
+
+/* windowed: pinned at the top-left of the viz canvas with a sensible
+   default size; the user can drag it anywhere via the title bar.
+   Position is preserved across reloads via localStorage. Stays clear
+   of the bottom controls (music + viz-ctrl row) by default. */
+#ht_brw #kd-viz-panel #kd-tracker {
+    position: absolute;
+    top: 56px;
+    left: 12px;
+    width: min(640px, calc(100% - 24px));
+    height: min(180px, calc(100% - 140px));
+    /* heavier transparency so the visualizer behind the tracker
+       remains visible. Backdrop blur keeps cell text readable. */
+    background:
+        linear-gradient(180deg, rgba(15, 18, 26, 0.55), rgba(10, 12, 18, 0.62));
+    border: 1px solid rgba(0, 255, 150, 0.28);
+    border-radius: 10px;
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 0 24px rgba(0, 255, 150, 0.06);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    overflow: hidden;
+    z-index: 3;
+    box-sizing: border-box;
+    transition: height 0.18s ease;
+}
+
+/* minimised state — only the title bar is visible. The user clicks
+   the toggle button (or the title) to restore. */
+#ht_brw #kd-tracker.kd-tracker-collapsed {
+    height: 18px !important;
+    min-height: 18px;
+}
+#ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-cols,
+#ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-body-wrap {
+    display: none;
+}
+
+/* fullscreen: floating + more transparent so the canvas reads
+   through. Same default top-center anchor; user can drag elsewhere. */
+#ht_brw #kd-viz-panel:fullscreen #kd-tracker,
+#ht_brw #kd-viz-panel:-webkit-full-screen #kd-tracker {
+    top: 56px;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translateX(-50%);
+    width: min(900px, 80vw);
+    height: min(260px, 28vh);
+    background: rgba(0, 0, 0, 0.32);
+    border-color: rgba(0, 255, 150, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+#ht_brw #kd-tracker.kd-tracker-dragging {
+    transition: none !important;
+    user-select: none;
+    cursor: grabbing;
+}
+
+/* drag handle (title row). The title text is the actual drag area;
+   the +/- toggle on the right is a separate click target. */
+#ht_brw #kd-tracker .kd-tracker-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 18px;
+    padding: 0 6px 0 8px;
+    background: linear-gradient(180deg, rgba(0, 255, 150, 0.14), rgba(0, 255, 150, 0.04));
+    border-bottom: 1px solid rgba(0, 255, 150, 0.22);
+    font-family: var(--font-mono);
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--a);
+    text-transform: uppercase;
+    user-select: none;
+}
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-title {
+    flex: 1 1 auto;
+    cursor: grab;
+    text-shadow: 0 0 6px rgba(0, 255, 150, 0.4);
+    /* decorative grip dots so the handle reads as draggable */
+}
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-title::before {
+    content: '⠿';
+    margin-right: 8px;
+    color: rgba(0, 255, 150, 0.5);
+    font-size: 1.4em;
+    line-height: 0;
+    vertical-align: middle;
+}
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-title:active {
+    cursor: grabbing;
+}
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 14px;
+    color: var(--a);
+    font-size: 1.4em;
+    line-height: 1;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: background 0.12s, color 0.12s;
+}
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-toggle:hover {
+    background: rgba(0, 255, 150, 0.2);
+    color: var(--a-hil);
+}
+
+/* channel labels strip (immediately below the title bar) */
+#ht_brw #kd-tracker .kd-tracker-cols {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 1px;
+    padding: 3px 6px 2px;
+    border-bottom: 1px solid rgba(0, 255, 150, 0.14);
+    background: rgba(0, 0, 0, 0.28);
+    font-family: var(--font-mono);
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--a);
+    text-transform: uppercase;
+    overflow: hidden;        /* never show a scrollbar on the header */
+}
+#ht_brw #kd-tracker .kd-tracker-cols .cell {
+    flex: 0 0 auto;
+    width: 7em;              /* matches body cell width */
+    text-align: center;
+    border-right: 1px solid rgba(0, 255, 150, 0.08);
+}
+#ht_brw #kd-tracker .kd-tracker-cols .cell:last-child {
+    border-right: none;
+}
+
+/* body wrapper — clips overflow and hosts the fixed-position cursor
+   overlay so the play-head bar stays visually pinned to the centre
+   while pattern rows scroll under it (Furnace's exact behaviour). */
+#ht_brw #kd-tracker .kd-tracker-body-wrap {
+    flex: 1 1 auto;
+    position: relative;
+    overflow: hidden;
+}
+
+/* fixed centred play-head — Furnace's PATTERN_PLAY_HEAD = white 25 %.
+   Lives outside the scroll container so it never moves while the
+   rows below it slide. */
+#ht_brw #kd-tracker .kd-tracker-cursor {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1.4em;          /* matches body line-height */
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.16);
+    border-top: 1px solid rgba(255, 255, 255, 0.28);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* body — vertical scroll for rows, horizontal scroll for many-channel
+   modules. All scrollbars are hidden on every surface so nothing
+   jitters during the per-row centring. */
+#ht_brw #kd-tracker .kd-tracker-body {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: 0.72em;
+    line-height: 1.4;
+    color: var(--fg-weak);
+    padding: calc(50% - 0.7em) 0;   /* room above & below so any row can centre */
+    scrollbar-width: none;
+    z-index: 1;
+}
+#ht_brw #kd-tracker .kd-tracker-body::-webkit-scrollbar {
+    display: none;
+}
+
+/* one pattern row */
+#ht_brw #kd-tracker .row {
+    display: flex;
+    gap: 1px;
+    padding: 0 6px;
+    white-space: nowrap;
+}
+
+/* Beat highlights — match Furnace's defaults from guiConst.cpp:
+   PATTERN_HI_1 (every 4th row): rgba(0.6,0.6,0.6,0.2) ≈ light grey
+   PATTERN_HI_2 (every 16th row): rgba(0.5,0.8,1.0,0.2) ≈ light blue */
+#ht_brw #kd-tracker .row.beat-1 {
+    background: rgba(153, 153, 153, 0.10);
+}
+#ht_brw #kd-tracker .row.beat-2 {
+    background: rgba(128, 204, 255, 0.14);
+}
+
+/* Currently playing row — the actual highlight is rendered by the
+   fixed `.kd-tracker-cursor` overlay above. We just nudge the row's
+   text so it reads cleanly against the white-translucent bar. */
+#ht_brw #kd-tracker .row.current .cell i,
+#ht_brw #kd-tracker .row.current .rowidx {
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.45);
+}
+
+/* Row index — Furnace's PATTERN_ROW_INDEX = #80CCFF (light blue) */
+#ht_brw #kd-tracker .rowidx {
+    flex: 0 0 auto;
+    width: 2.4em;
+    color: #80ccff;
+    text-align: right;
+    padding-right: 6px;
+    border-right: 1px solid rgba(128, 204, 255, 0.18);
+}
+
+/* per-channel cell — fixed width grid so columns line up vertically */
+#ht_brw #kd-tracker .cell {
+    flex: 0 0 auto;
+    width: 7em;
+    padding: 0 3px;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    white-space: pre;
+}
+#ht_brw #kd-tracker .cell:last-child {
+    border-right: none;
+}
+
+/* Cell sub-fragments — Furnace's per-column colour palette:
+   note  → PATTERN_ACTIVE  white #FFFFFF
+   inst  → PATTERN_INS     light blue #66B3FF
+   vol   → gradient #008000..#00FF00 (set inline by JS via volumeShade)
+   fx    → effect-type categories (see Furnace effectColor[] table) */
+#ht_brw #kd-tracker .cell i {
+    font-style: normal;
+    margin-right: 3px;
+    letter-spacing: 0;
+}
+#ht_brw #kd-tracker .cell i:last-child { margin-right: 0; }
+#ht_brw #kd-tracker .cell i.note     { color: #ffffff; font-weight: 700; }
+#ht_brw #kd-tracker .cell i.inst     { color: #66b3ff; }
+#ht_brw #kd-tracker .cell i.volume   { color: #00ff00; }   /* fallback when JS shade missing */
+#ht_brw #kd-tracker .cell i.inactive { color: rgba(255, 255, 255, 0.22); }
+
+/* effect-type categories (mirrored from guiConst.cpp default colors).
+   The "fx" base class only exists alongside one of these modifiers,
+   never alone. */
+#ht_brw #kd-tracker .cell i.fx-misc    { color: #4d4dff; }   /* PATTERN_EFFECT_MISC */
+#ht_brw #kd-tracker .cell i.fx-pitch   { color: #ffff00; }   /* PATTERN_EFFECT_PITCH */
+#ht_brw #kd-tracker .cell i.fx-volume  { color: #00ff00; }   /* PATTERN_EFFECT_VOLUME */
+#ht_brw #kd-tracker .cell i.fx-panning { color: #00ffff; }   /* PATTERN_EFFECT_PANNING */
+#ht_brw #kd-tracker .cell i.fx-speed   { color: #ff00ff; }   /* PATTERN_EFFECT_SPEED */
+#ht_brw #kd-tracker .cell i.fx-song    { color: #ff0000; }   /* PATTERN_EFFECT_SONG */
+#ht_brw #kd-tracker .cell i.fx-time    { color: #8000ff; }   /* PATTERN_EFFECT_TIME */
+#ht_brw #kd-tracker .cell i.fx-invalid { color: #ff0000; }   /* PATTERN_EFFECT_INVALID */
+#ht_brw #kd-tracker .cell i.fx-sysprim { color: #80ff00; }   /* PATTERN_EFFECT_SYS_PRIMARY */
+
+/* mobile — shrink fonts and tighten gutters so more channels fit */
+@media (max-width: 760px) {
+    #ht_brw #kd-viz-panel #kd-tracker {
+        top: 40px;
+        left: 8px;
+        width: calc(100% - 16px);
+        /* viz panel is only 200 px tall on mobile (windowed); leave
+           ~50 px above for the track/preset chips and a few px below
+           so the controls remain accessible. */
+        height: 120px;
+    }
+    #ht_brw #kd-viz-panel:fullscreen #kd-tracker,
+    #ht_brw #kd-viz-panel:-webkit-full-screen #kd-tracker {
+        top: 48px;
+        width: calc(100vw - 16px);
+        height: 24vh;
+    }
+    #ht_brw #kd-tracker .kd-tracker-cols {
+        font-size: 0.62em;
+        padding: 2px 4px 1px;
+    }
+    #ht_brw #kd-tracker .kd-tracker-cols .cell {
+        width: 5.5em;
+    }
+    #ht_brw #kd-tracker .kd-tracker-body {
+        font-size: 0.62em;
+    }
+    #ht_brw #kd-tracker .rowidx {
+        width: 2em;
+        padding-right: 3px;
+    }
+    #ht_brw #kd-tracker .cell {
+        width: 5.5em;
+        padding: 0 2px;
+    }
+    #ht_brw #kd-tracker .cell i {
+        margin-right: 2px;
+    }
+}
+
 #ht_brw #kd-viz-ctrl {
     position: absolute;
     bottom: 10px;
