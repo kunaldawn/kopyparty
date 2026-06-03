@@ -3,7 +3,8 @@
 A slim, read-only, themed personal HTTP file archive — forked from
 [copyparty](https://github.com/9001/copyparty) (MIT, © ed). All credit for the
 HTTP file-server engine goes to the upstream project; this fork strips it down
-to one specific use case and reskins it.
+to one specific use case, reskins it, and bolts on an in-browser music player
+that upstream doesn't have.
 
 ---
 
@@ -13,9 +14,16 @@ A minimal HTTP front-end for browsing a folder tree on disk in a web browser.
 That's it.
 
 It serves files. It renders folder grids, the occasional Markdown file, plays
-audio/video, shows images in a lightbox, and lets you download a sub-folder as
-a zip. It does not let you upload, edit, delete, rename, share, or do anything
-that mutates state on the server.
+audio (including tracker/chiptune formats no browser decodes natively) and
+video, shows images in a lightbox, and lets you download a sub-folder as a zip.
+It does not let you upload, edit, delete, rename, share, or do anything that
+mutates state on the server.
+
+Two live deployments run this fork:
+
+- **[chiptune.kunaldawn.com](https://chiptune.kunaldawn.com/)** — a tracker /
+  chiptune archive (the music-player work below is built for this)
+- **[tube.kunaldawn.com](https://tube.kunaldawn.com/)** — a video archive
 
 ## What it isn't
 
@@ -29,31 +37,74 @@ that mutates state on the server.
 - not authenticated
 
 If you want any of those, use upstream copyparty instead — it's an excellent
-piece of software. This fork is a deliberate downgrade.
+piece of software. This fork is a deliberate downgrade in surface area, with a
+deliberate upgrade in one direction: audio.
 
-## Philosophy
+## Enhancements over upstream
 
-> A shelf in a house, not a rack in a data centre.
+The fork's distinctive feature is a self-contained music stack that turns the
+read-only browser into a chiptune jukebox. Everything is vendored and runs
+offline — no CDN, no server-side transcode.
 
-- **Read-only**: every POST / PUT / DELETE / WebDAV verb returns 405. The web
-  UI exposes no login, no upload, no rename, no delete.
-- **Slim**: stripped of FTP / SFTP / SMB / TFTP / mDNS / SSDP / OPDS / IDP /
-  shares / Prometheus / QR-code / EasyMDE / fuse-client / 22 translations.
-  The remaining surface is roughly 60% the size of upstream by line count.
-- **Themed**: a single CRT / neon-green theme matched to the sibling sites
-  ([kunaldawn.com](https://kunaldawn.com), `wiki.kunaldawn.com`,
-  `pdfarchive.kunaldawn.com`). No theme switcher. No light mode.
-- **Self-hosted, low-power**: designed to live on a 2× Raspberry Pi 4 +
-  N150 mini-PC cluster running on ~30 W of off-grid solar. So the static
-  surface is small enough to cache aggressively and the server doesn't talk
-  to the network for fonts or scripts.
-- **Aggressive defaults**: grid view always on, view-mode toggle hidden,
-  list view dropped, basic-browser fallback themed but rarely seen.
+| addition | file | what it does |
+|---|---|---|
+| **Tracker playback** | `web/kd-chiptune.js` | decodes `.mod` `.it` `.s3m` `.xm` `.mptm` `.stm` `.mo3` `.mt2` (+ gzip/xz variants) in-browser via libopenmpt (WASM), routed through the existing player widget |
+| **Milkdrop visualizer** | `web/kd-visualizer.js` | a butterchurn (Milkdrop) WebGL panel driven by the live audio; preset cycling (manual / random / auto), fullscreen, settings persisted to `localStorage` |
+| **Live pattern view** | `web/kd-tracker.js` | a scrolling Furnace-style channel/row grid read straight from libopenmpt while a module plays, with cross-pattern continuity; draggable overlay |
+| **Client-side waveforms** | `web/kd-chiptune.js` | the seekbar waveform is rendered in-browser (the server emits no audio-peaks PNG in this fork) |
+
+### How it works
+
+**Tracker playback.** Browsers can't decode module formats, and this fork
+dropped upstream's server-side transcode. So on the first tracker play,
+`kd-chiptune.js` lazy-loads `libopenmpt.js` (a WASM port of the OpenMPT decoder,
+~2.2 MB) plus `chiptune2.js`. It hooks `window.play`, sniffs the extension, and
+swaps `mp.au` for a `ChiptuneAudio` shim that mimics enough of
+`HTMLAudioElement` — `currentTime`, `duration`, `play`/`pause`, `volume`,
+`timeupdate`/`ended` events — that copyparty's existing widget (progress bar,
+prev/play/next, volume) drives it unchanged. Native formats (mp3, ogg, opus,
+flac, m4a) keep the untouched `HTMLAudioElement` path.
+
+**Visualizer.** All audio flows through one shared `AudioContext`
+(`window.kdAudio.context`): native tracks via a `MediaElementSource` tapped off
+`mp.au`, tracker tracks via the `ScriptProcessor` node chiptune2 already runs.
+Switching formats just rewires that single source into butterchurn, so the
+visualizer is format-agnostic. The rAF render loop runs only while the panel is
+open, so a collapsed visualizer costs no CPU.
+
+**Pattern view + waveforms.** `kd-tracker.js` polls libopenmpt for the current
+order, row, and pattern data and paints a channel grid that scrolls with the
+play-head, keeping the previous/next pattern visible across boundaries (the
+Furnace behaviour). Because there's no server peaks PNG, the waveform under the
+seekbar is generated client-side — Web-Audio-decoded for native files, sample
+buffer for trackers — and handed to the player's `loadwaves` as a `data:` URL.
+
+These modules are wired in as deferred `<script>` tags in `browser.html` and
+patch upstream's player at runtime (re-applied after each SPA navigation), so
+they stay isolated from the slimmed copyparty core.
+
+## Design constraints
+
+Constraints that shape this repo specifically:
+
+- **Read-only.** Every POST / PUT / DELETE / WebDAV verb returns 405. The web
+  UI exposes no login, no upload, no rename, no delete, no share.
+- **Slim.** Stripped of FTP / SFTP / SMB / TFTP / mDNS / SSDP / OPDS / IDP /
+  shares / Prometheus / QR-code / EasyMDE / fuse-client / 22 translations —
+  roughly 60% of upstream by line count.
+- **Offline-first.** No CDN and no network fonts: the font, `marked`,
+  `DOMPurify`, `prism`, `libopenmpt`, and `butterchurn` are all vendored under
+  `web/deps/`. The static surface is small enough to cache aggressively.
+- **Single theme.** One CRT / neon-green theme in `kopyparty/web/kd-theme.css`,
+  matched to the [kunaldawn.com](https://kunaldawn.com) family. No switcher, no
+  light mode.
+- **Aggressive defaults.** Grid view always on, list view dropped, view-mode
+  toggle hidden, basic-browser fallback themed but rarely seen.
 
 ## What's in the UI
 
 - **Header** with a configurable archive title (`KD's Homebrew Data Archive`
-  by default), a single `ABOUT` link to the parent kunaldawn.com site.
+  by default) and a single `ABOUT` link to the parent kunaldawn.com site.
 - **Breadcrumb** at the top showing the current path; or a tree sidebar
   (toggleable, both modes are themed).
 - **Grid toolbar** with multiselect, crop, 3×, zoom, chop, sort, and a
@@ -62,7 +113,9 @@ piece of software. This fork is a deliberate downgrade.
 - **File grid** with thumbnails (when supported by available libraries) or
   emoji-style placeholder tiles colored by extension.
 - **Audio player** as a rounded panel above the footer; appears only when a
-  music file is playing, vanishes when stopped.
+  track is playing, vanishes when stopped. Plays both native audio and tracker
+  modules, with the optional Milkdrop visualizer and live pattern view (see
+  [Enhancements](#enhancements-over-upstream)).
 - **Image / video lightbox** with native HTML5 controls, prev/next navigation.
 - **Markdown viewer** that renders both inline (`?doc=foo.md`) and standalone
   (`/foo.md?v`) — both with the same theme. TOC sidebar on the standalone
@@ -124,6 +177,9 @@ kopyparty/                 main package (renamed from upstream copyparty/)
 ├── …
 └── web/                   static frontend
     ├── kd-theme.css       all KD theming overrides
+    ├── kd-chiptune.js     tracker/chiptune playback + client waveforms
+    ├── kd-visualizer.js   butterchurn (Milkdrop) visualizer panel
+    ├── kd-tracker.js      live Furnace-style pattern view
     ├── browser.html       main grid / list view
     ├── splash.html        ?h control panel
     ├── md.html            standalone markdown viewer
@@ -131,7 +187,8 @@ kopyparty/                 main package (renamed from upstream copyparty/)
     ├── svcs.html          ?hc connect page (trimmed to a minimal notice)
     ├── browser2.html      no-JS fallback (themed)
     ├── msg.html           transient redirect/notice page
-    └── deps/              vendored marked + DOMPurify + prism + scp font
+    └── deps/              vendored marked + DOMPurify + prism + scp font,
+                           libopenmpt (WASM) + chiptune2, butterchurn + presets
 
 Dockerfile                 alpine + python3.12 + jinja2
 docker-compose.yml         single-service compose with env-driven config
@@ -188,8 +245,14 @@ upstream copyparty:
 
 All of the heavy lifting of the HTTP server, the up2k chunked uploader, the
 WebDAV layer, and the thumbnail pipeline was written by ed and contributors
-to the upstream project. This fork is a thin re-skinning + a feature subset.
-The original LICENSE (MIT) is preserved at the root.
+to the upstream project. This fork is a thin re-skinning + a feature subset +
+the music stack above. The original LICENSE (MIT) is preserved at the root.
+
+The tracker/chiptune layer builds on third-party libraries vendored under
+`web/deps/`: [libopenmpt](https://lib.openmpt.org/libopenmpt/) /
+[chiptune2.js](https://github.com/deskjet/chiptune2.js) for decoding and
+[butterchurn](https://github.com/jberg/butterchurn) for the Milkdrop
+visualizer. Their respective licenses apply.
 
 ## License
 
