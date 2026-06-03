@@ -2877,3 +2877,49 @@ html#ht_rup #tw th {
 #ht_brw #kd-viz-panel:-webkit-full-screen #kd-tracker {
     background: rgba(6, 8, 13, 0.82);
 }
+
+/* ======================================================================
+   PERFORMANCE: tracker overlay = its own cached compositor layer
+   ----------------------------------------------------------------------
+   The real cause of "open the tracker and everything lags" (the viz drops
+   frames, all cores hit ~80%). The tracker is a large, translucent DOM
+   (hundreds of text spans, dimmed prev/next rows, a blurred box-shadow,
+   a rounded clip) stacked `position:absolute; z-index:3` directly over the
+   60fps-animating butterchurn WebGL canvas.
+
+   If that overlay is NOT on its own compositor layer, the browser cannot
+   update the canvas layer independently — it has to fold the canvas and
+   the overlapping tracker into one layer and RE-RASTERIZE that whole region
+   every single canvas frame, on the raster thread pool. That is the "all
+   cores 80%" symptom, and because raster falls behind the compositor can't
+   present at 60fps → visible lag in the viz too. The cost scales with the
+   visible body, which is exactly why collapsing/minimizing the tracker
+   (body `display:none`) makes the lag vanish. Webamp's Milkdrop has no DOM
+   over its canvas, so it never pays this.
+
+   Fix: explicitly promote the tracker so the canvas stays an independent,
+   fast-updating layer and the tracker is rasterized ONCE and cached.
+     - `will-change: transform` promotes to its own layer WITHOUT clipping
+       (unlike `contain: paint`, which would clip the panel's outset
+       box-shadow / neon glow). It also composes fine with the fullscreen
+       `transform: translateX(-50%)`.
+     - `contain: layout style` isolates layout/style recalc to the panel.
+     - On the scrolling body, `contain: paint` is safe (overflow already
+       clips) and lets the per-row `scrollTop` re-centre move a cached,
+       tile-backed layer instead of repainting rows over the live canvas.
+   Gated on `.kd-tracker-on` so the extra layer only exists while a module
+   is actually playing.
+
+   NOTE: this could not be A/B-verified locally — rAF reports 60fps here
+   regardless because the cost is on the raster/compositor threads, not the
+   main thread, and headless Chromium rasterizes WebGL in software. Verify
+   on real GPU hardware.
+   ====================================================================== */
+#ht_brw #kd-tracker.kd-tracker-on {
+    will-change: transform;
+    contain: layout style;
+}
+#ht_brw #kd-tracker .kd-tracker-body {
+    will-change: transform;
+    contain: layout paint style;
+}
