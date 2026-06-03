@@ -1912,6 +1912,7 @@ def add_ui(ap, retry: int):
     ap2.add_argument("--spinner", metavar="TXT", type=u, default="🌲", help="\033[33memoji\033[0m or \033[33memoji,css\033[0m Example: [\033[32m🥖,padding:0\033[0m]")
     ap2.add_argument("--kd-header", metavar="TXT", type=u, default="KD's Homebrew Data Archive", help="KD fork: text rendered in the themed header title box")
     ap2.add_argument("--kd-footer", metavar="TXT", type=u, default="Served offline via KD's Homebrew Data Archive", help="KD fork: text rendered in the themed footer (the '> ' prefix is added automatically)")
+    ap2.add_argument("--kd-dircache-secs", metavar="SEC", type=int, default=86400, help="KD fork: keep an in-memory snapshot of every directory's listing so browsing a slow disk doesn't scandir on every request; re-walk the whole tree this often in the background (first warm runs at startup; 0 disables the cache)")
     ap2.add_argument("--css-browser", metavar="L", type=u, default="", help="URL to additional CSS to include in the filebrowser html")
     ap2.add_argument("--js-browser", metavar="L", type=u, default="", help="URL to additional JS to include in the filebrowser html")
     ap2.add_argument("--js-other", metavar="L", type=u, default="", help="URL to additional JS to include in all other pages")

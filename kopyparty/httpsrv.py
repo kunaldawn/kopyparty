@@ -120,6 +120,15 @@ class HttpSrv(object):
         self.log = broker.log
         self.asrv = broker.asrv
 
+        # KD fork: warm + maintain the in-memory directory cache here, inside
+        # the process that actually serves requests (authsrv._ls reads it).
+        # HttpSrv is built once per serving process for BOTH broker types
+        # (threaded: one in the hub process; multiprocessing: one per worker),
+        # so this is the single correct init point regardless of -j. Idempotent.
+        from . import kdcache
+
+        kdcache.start(self.args, self.log, self.asrv)
+
         # redefine in case of multiprocessing
         socket.setdefaulttimeout(120)
 

@@ -7,13 +7,26 @@ services:
       - "${KOPYPARTY_PORT:-8282}:3923"
     volumes:
       - ${KOPYPARTY_DATA_DIR:-./srv}:/data:ro
-      # /cache holds the thumbnail cache (.hist tree). Source is mounted
-      # read-only, so kopyparty would otherwise fail to write thumbs into
-      # each volume's default `.hist` folder. --hist points the histpath
-      # to this writable named volume instead.
+      # /cache holds the thumbnail cache (.hist tree) and the up2k index DB.
+      # Source is mounted read-only, so kopyparty would otherwise fail to
+      # write thumbs into each volume's default `.hist` folder. --hist points
+      # the histpath to this writable named volume instead.
+      #
+      # PERF: this volume MUST live on fast storage (SSD), NOT the USB HDD,
+      # or metadata/thumbnail reads keep seeking. Named volumes live under the
+      # docker data-root. Verify the backing device with:
+      #   docker volume inspect kopyparty_cache --format '{{.Mountpoint}}'
+      #   df --output=source <that path>      # then confirm it's your SSD
+      # To pin it to an explicit SSD path instead, replace the line below with
+      # a bind mount, e.g.:  - /mnt/ssd/kopyparty-cache:/cache
       - kopyparty_cache:/cache
-    mem_limit: ${KOPYPARTY_MEM_LIMIT:-2g}
-    memswap_limit: ${KOPYPARTY_MEM_LIMIT:-2g}
+    # PERF: this cgroup cap also bounds the kernel page-cache for file reads
+    # served off the USB HDD (reclaimable). With rarely-changing content, a
+    # generous limit keeps recently-downloaded files hot in RAM. Set to
+    # ~60-75% of host RAM. The in-memory directory cache (KOPYPARTY_DIRCACHE_SECS)
+    # is tiny and counts here too but is negligible.
+    mem_limit: ${KOPYPARTY_MEM_LIMIT:-8g}
+    memswap_limit: ${KOPYPARTY_MEM_LIMIT:-8g}
     environment:
       - TZ=${TZ:-UTC}
     command:
@@ -37,8 +50,20 @@ services:
       # rotate the thumbnail set explicitly).
       - --th-maxage=999999999
       - --th-clean=0
-      # use 1 worker thread for pregen so logs stay readable on first run
-      - -j1
+      # PERF: keep -j1. This is a DISK-bound, read-only archive — the USB HDD's
+      # seek latency is the bottleneck, not CPU. -j1 runs a single process that
+      # already serves requests concurrently via a thread pool AND shares one
+      # warm in-memory directory cache. Raising -j spawns separate worker
+      # PROCESSES that each maintain (and re-walk) their OWN copy of the cache,
+      # multiplying the startup/daily tree scan across the slow disk and the
+      # RAM used — worse here, not better. Only raise it if you become genuinely
+      # CPU-bound (e.g. heavy concurrent thumbnail transcoding).
+      - -j${KOPYPARTY_WORKERS:-1}
+      # KD fork: in-memory directory cache — re-walk the tree this often (sec)
+      # to pick up rarely-added files; 0 disables. First warm runs at startup,
+      # so the first browse after boot is already served from RAM. A container
+      # restart also forces an immediate re-warm.
+      - --kd-dircache-secs=${KOPYPARTY_DIRCACHE_SECS:-86400}
       - -i
       - 0.0.0.0
       - -p

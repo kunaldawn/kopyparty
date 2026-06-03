@@ -49,6 +49,7 @@ from .util import (
     vjoin,
     vsplit,
 )
+from . import kdcache  # KD fork: in-memory directory cache (read path)
 
 if HAVE_SQLITE3:
     import sqlite3
@@ -772,7 +773,20 @@ class VFS(object):
         virt_vis = {}  # nodes readable by user
         abspath = self.canonical(rem)
         if abspath:
-            real = list(statdir(self.log, scandir, lstat, abspath, throw))
+            # KD fork: serve the directory listing from the in-memory cache
+            # for the common follow-symlink case so browsing a slow USB HDD
+            # doesn't scandir on every request. `?lt` (lstat) bypasses to
+            # live disk; the up2k indexer calls statdir() directly, not _ls,
+            # so indexing is unaffected.
+            dc = kdcache.INST
+            use_cache = (not lstat) and dc is not None
+            cached = dc.get(abspath) if use_cache else None
+            if cached is not None:
+                real = list(cached)  # own copy; sorted/filtered below
+            else:
+                real = list(statdir(self.log, scandir, lstat, abspath, throw))
+                if use_cache:
+                    dc.put(abspath, real)
             real.sort()
         else:
             real = []

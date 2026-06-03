@@ -101,6 +101,32 @@ Constraints that shape this repo specifically:
 - **Aggressive defaults.** Grid view always on, list view dropped, view-mode
   toggle hidden, basic-browser fallback themed but rarely seen.
 
+## Performance (slow-disk archives)
+
+This fork is built to run off a slow USB HDD whose contents rarely change.
+Upstream re-reads the disk (`scandir` + a `stat` per entry) on **every**
+directory listing and **every** tree expansion — a burst of random seeks per
+browse on spinning rust.
+
+`kopyparty/kdcache.py` adds an **in-memory directory cache**: a snapshot of
+every folder's entries, warmed once at startup and re-walked by a background
+thread on an interval (default 24h). Listings and the tree sidebar then serve
+from RAM, so day-to-day browsing does **zero** disk IOPS. Because content
+rarely changes, newly-added files appear at the next background re-walk — or
+immediately after a container restart, which forces a re-warm. The cache holds
+metadata only (tens of MB even at hundreds of thousands of files) and the up2k
+indexer still reads the real disk, so search/thumbnails are unaffected.
+
+Two knobs matter for slow-disk deployments:
+
+- **`KOPYPARTY_WORKERS` stays `1`.** The bottleneck is disk seek latency, not
+  CPU; a single process already serves requests concurrently via a thread pool
+  and shares one warm cache. Raising it spawns separate worker processes that
+  each re-walk their own copy, multiplying scans across the slow disk.
+- **The index DB + thumbnail cache live on SSD** (the `kopyparty_cache` Docker
+  volume), never on the HDD, and `KOPYPARTY_MEM_LIMIT` is generous so the
+  kernel can keep recently-downloaded files hot in its page cache.
+
 ## What's in the UI
 
 - **Header** with a configurable archive title (`KD's Homebrew Data Archive`
@@ -154,7 +180,9 @@ there and they appear instantly. For real deployments, point
 |---|---|---|
 | `KOPYPARTY_PORT` | `8282` | host port mapped to container's `3923` |
 | `KOPYPARTY_DATA_DIR` | `./srv` | host directory mounted read-only at `/data` |
-| `KOPYPARTY_MEM_LIMIT` | `2g` | container memory cap |
+| `KOPYPARTY_MEM_LIMIT` | `8g` | container memory cap; also bounds the kernel page-cache for file reads, so keep it generous (~60–75% of host RAM) |
+| `KOPYPARTY_DIRCACHE_SECS` | `86400` | in-memory directory-cache re-walk interval (seconds); `0` disables the cache |
+| `KOPYPARTY_WORKERS` | `1` | worker count (`-j`); keep `1` for disk-bound archives (see [Performance](#performance-slow-disk-archives)) |
 | `KOPYPARTY_HEADER` | `KD's Homebrew Data Archive` | top-of-page title text |
 | `KOPYPARTY_FOOTER` | `Served offline via KD's Homebrew Data Archive` | bottom-of-page tagline (the `> ` prefix is added by CSS) |
 | `TZ` | `UTC` | container timezone |
@@ -173,6 +201,7 @@ kopyparty/                 main package (renamed from upstream copyparty/)
 ├── svchub.py              service hub (lifecycle)
 ├── authsrv.py             volume + permission parsing (still loads, no UI)
 ├── up2k.py                file index (used for read-only listing/search)
+├── kdcache.py             in-memory directory cache (fork-only; slow-disk perf)
 ├── th_srv.py              thumbnail server
 ├── …
 └── web/                   static frontend

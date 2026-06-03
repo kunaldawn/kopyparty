@@ -219,6 +219,58 @@ Inside, `#np_inf` (the metadata panel with thumbnail) is permanently hidden;
 only `#pctl` (play controls), `#barbuf` (progress), `#pvol` (volume) show.
 The widget is wrapped in a rounded neon panel via `#widgeti` styling.
 
+### Directory cache (`kd-dircache`)
+
+The fork is meant to run off a **slow USB HDD** whose contents rarely change.
+Upstream does a live `os.scandir()` + a `stat()` per entry on **every**
+directory listing and **every** tree-sidebar expansion (`authsrv._ls` →
+`util.statdir`), and the `-e2dsa` index DB does **not** serve listings (it's
+metadata/tags/dir-sizes only). On spinning rust that's a burst of random seeks
+per browse.
+
+`kopyparty/kdcache.py` (fork-only module) fixes this with an in-memory snapshot
+of every directory's `(name, os.stat_result)` list:
+
+- **One hook**, in `authsrv._ls` — the *sole* chokepoint both the grid listing
+  (`httpcli.py` ~4178) and the tree (`~3256`) flow through. Keyed by the
+  fully-resolved abspath (`absreal`), byte-identical to `_canonical()` so
+  lookups hit.
+- **Warmed at startup**, then a daemon **re-walks the whole tree every
+  `--kd-dircache-secs`** (default `86400` = 24h; `0` disables). A container
+  restart also forces an immediate re-warm — that's the intended way to pick up
+  newly-added files on demand (there's no manual refresh endpoint; `?scan` was
+  removed).
+- **`?lt` (lstat) bypasses** to live disk. The **up2k indexer is unaffected** —
+  it calls `statdir()` directly (`up2k.py:1549`), never via `_ls` — so indexing
+  always sees the real disk.
+- Snapshot is metadata only (~tens of MB even at hundreds of thousands of
+  files); the listing serves a shallow copy so `_ls` can sort/filter freely.
+
+**Critical: init point is `HttpSrv.__init__`, NOT `svchub`.** With `-j>1`,
+`check_mp_enable()` selects `BrokerMp`, which spawns separate worker
+**processes** (`broker_mpw.py` builds a fresh `AuthSrv` per worker) — and `_ls`
+runs in those workers. A module-global singleton (`kdcache.INST`) created in the
+parent `svchub` is `None` in the workers, so the cache **silently never
+serves**. `HttpSrv` is constructed once per *serving* process for both broker
+types (threaded `-j1`: one in the hub process; multiprocess: one per worker), so
+`kdcache.start()` lives there and is idempotent. **Quick check that it's
+serving:** add a file on disk after warm — if it appears in the listing
+immediately (instead of after a restart/re-warm), the cache isn't serving in the
+request process.
+
+**Keep `-j1`.** This workload is disk-bound (HDD seek latency, not CPU). `-j1`
+is a single process that already serves concurrently via a thread pool and
+shares **one** warm cache; `-jN` makes each worker process re-walk and hold its
+**own** copy, multiplying the daily scan across the slow disk. Only raise it if
+you become genuinely CPU-bound (e.g. heavy concurrent thumbnail transcoding).
+
+Knobs (env → `docker-compose.yml` → CLI): `KOPYPARTY_DIRCACHE_SECS`
+(`--kd-dircache-secs`), `KOPYPARTY_WORKERS` (`-j`, default 1), and
+`KOPYPARTY_MEM_LIMIT` (default `8g`) — the mem cap also bounds the kernel
+page-cache for *file downloads* off the HDD, so keep it generous (~60–75% of
+host RAM). The index DB + thumbnails must sit on **SSD** (the `kopyparty_cache`
+named volume), never the HDD.
+
 ## Build & run
 
 ### Local Docker Compose
@@ -360,6 +412,14 @@ await mcp__playwright__browser_close();
   any reference to upload-related state as no-op.
 - **Don't break the `--no-cache` discipline.** Docker layer caching loves
   to skip CSS edits.
+- **Don't init process-wide singletons in `svchub` if the request path needs
+  them.** With `-j>1` the request path runs in `BrokerMp` worker *processes*;
+  parent-process globals are `None` there. Init in `HttpSrv.__init__` (runs once
+  per serving process). This is exactly the trap the `kd-dircache` hit — see
+  *Directory cache* above.
+- **Don't bump `-j` to "go faster" on the archive box.** It's disk-bound; more
+  worker processes just multiply the dir-cache walks across the slow HDD. Keep
+  `-j1` unless genuinely CPU-bound.
 
 ## When in doubt
 
