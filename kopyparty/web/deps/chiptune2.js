@@ -221,7 +221,14 @@ ChiptuneJsPlayer.prototype.createLibopenmptNode = function(buffer, config) {
     var outputL = e.outputBuffer.getChannelData(0);
     var outputR = e.outputBuffer.getChannelData(1);
     var framesToRender = outputL.length;
-    if (this.ModulePtr == 0) {
+    // kd fork fix: upstream typo `this.ModulePtr` (the real field is
+    // `modulePtr`) meant this end-guard was always `undefined == 0` → false,
+    // so a trailing onaudioprocess that fires after the module was cleaned
+    // up (modulePtr=0) fell through to read 0 frames from an invalid pointer
+    // and emitted a SPURIOUS second end event (onError type 'openmpt') one
+    // buffer after the real onEnded — which advanced the playlist twice and
+    // skipped a track. Correct casing short-circuits the dead callback.
+    if (this.modulePtr == 0) {
       for (var i = 0; i < framesToRender; ++i) {
         outputL[i] = 0;
         outputR[i] = 0;

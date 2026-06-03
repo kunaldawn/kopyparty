@@ -372,7 +372,15 @@
         // cleanup() at natural end, leaving the node ref dangling with
         // modulePtr=0.
         var p = getPlayer();
-        if (p.currentPlayingNode) p.currentPlayingNode = null;
+        // Defense-in-depth against double-advance / track skipping: a real
+        // track end arrives while currentPlayingNode is still set (chiptune2
+        // nulls only the node's modulePtr, not player.currentPlayingNode —
+        // we do that here). A duplicate/stale end event therefore finds it
+        // already null, so swallow it instead of firing a second 'ended'
+        // (which would skip the *next* track). Pairs with the chiptune2.js
+        // end-guard typo fix that stops the spurious trailing event at source.
+        if (!p.currentPlayingNode) return;
+        p.currentPlayingNode = null;
         if (activeShim) {
             activeShim._paused = true;
             activeShim._stopTimer();
