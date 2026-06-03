@@ -2842,3 +2842,38 @@ html#ht_rup #tw th {
         border-radius: 14px !important;
     }
 }
+
+/* ======================================================================
+   PERFORMANCE: no backdrop-blur over the live visualizer canvas
+   ----------------------------------------------------------------------
+   `backdrop-filter: blur()` on an element layered over the butterchurn
+   canvas forces the compositor to re-capture and re-blur that canvas
+   region EVERY frame. Over a 60fps-animating WebGL surface that pegs the
+   GPU compositor / CPU even on capable hardware — which is why the player
+   lagged with the visualizer open while Webamp's Milkdrop (no such overlay)
+   stays at 60fps. Disable blur on every viz/tracker overlay and lean on
+   slightly more opaque backgrounds for text readability instead.
+   ====================================================================== */
+#ht_brw #kd-viz-track,
+#ht_brw #kd-viz-info,
+#ht_brw #kd-viz-search,
+#ht_brw #kd-viz-music > #widget.open > #widgeti,
+#ht_brw #kd-viz-ctrl,
+#ht_brw #kd-viz-panel #kd-tracker,
+#ht_brw #kd-viz-panel:fullscreen #kd-tracker,
+#ht_brw #kd-viz-panel:-webkit-full-screen #kd-tracker {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+/* compensate the readability the blur was providing */
+#ht_brw #kd-viz-track,
+#ht_brw #kd-viz-info { background: rgba(7, 24, 35, 0.72); }
+#ht_brw #kd-viz-ctrl { background: rgba(7, 24, 35, 0.6); }
+#ht_brw #kd-viz-music > #widget.open > #widgeti { background: rgba(7, 24, 35, 0.78) !important; }
+#ht_brw #kd-viz-panel #kd-tracker {
+    background: linear-gradient(180deg, rgba(12, 15, 22, 0.86), rgba(8, 10, 16, 0.9));
+}
+#ht_brw #kd-viz-panel:fullscreen #kd-tracker,
+#ht_brw #kd-viz-panel:-webkit-full-screen #kd-tracker {
+    background: rgba(6, 8, 13, 0.82);
+}
