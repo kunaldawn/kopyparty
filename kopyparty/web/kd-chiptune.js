@@ -441,10 +441,19 @@
         var url = trackUrlFor(tid);
         if (!url) return;
 
-        // Stop any in-flight HTMLAudioElement.
+        // Stop any in-flight HTMLAudioElement. Detach copyparty's error
+        // handler first, then reset via removeAttribute('src') + load()
+        // — NOT `src = ''`. Setting an empty src fires MEDIA_ELEMENT_ERROR:
+        // "Empty src attribute", which copyparty's evau_error turns into a
+        // misleading "Your browser does not understand this audio format"
+        // toast (File: «») even though the tracker then plays fine. This
+        // element is discarded (mp.au is replaced by a ChiptuneAudio below),
+        // so dropping its handler is safe; copyparty rewires onerror on the
+        // fresh Audio it creates when a non-tracker plays next.
         if (window.mp.au && !(window.mp.au instanceof ChiptuneAudio)) {
+            try { window.mp.au.onerror = null; } catch (e) {}
             try { window.mp.au.pause(); } catch (e) {}
-            try { window.mp.au.src = ''; } catch (e) {}
+            try { window.mp.au.removeAttribute('src'); window.mp.au.load(); } catch (e) {}
         }
 
         if (!(window.mp.au instanceof ChiptuneAudio)) {
