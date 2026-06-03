@@ -663,8 +663,20 @@
         if (!widget) return;
         if (window.mp && window.mp.au) return;        // a track is loaded — keep widget
         if (!window.mp || !Array.isArray(mp.order) || mp.order.length === 0) {
-            widget.classList.remove('open');
-            try { document.documentElement.classList.remove('np_open'); } catch (e) {}
+            // Use widget.close() (→ widget.set(false)) rather than poking the
+            // class directly: widget.set() guards on an internal is_open flag,
+            // and stripping the 'open' class behind its back desyncs that flag
+            // (is_open stays true while the class is gone). A later
+            // widget.open() then sees is_open===true and no-ops, leaving the
+            // player STUCK HIDDEN even once a track starts — e.g. after landing
+            // on a no-audio folder (the archive roots have only subdirs) the
+            // music widget never reappears on play. close() keeps state in sync.
+            if (window.widget && typeof window.widget.close === 'function')
+                window.widget.close();
+            else {
+                widget.classList.remove('open');
+                try { document.documentElement.classList.remove('np_open'); } catch (e) {}
+            }
         }
     }
 
@@ -925,6 +937,33 @@
         if (patchDrawpos()) return;
         if (retries > 100) return;
         setTimeout(function () { tryPatchDrawpos(retries + 1); }, 100);
+    }
+
+    // Suppress the dead server-side waveform fetch. browser.js play() asks the
+    // server for a peaks PNG via `<track>&th=p`, but this fork never generates
+    // audio-peaks thumbnails (docker --th-pregen lists only image variants:
+    // j,jf,w,w3,wf,wf3 — no 'p'), so every track logged an ERR 404 for th=p.
+    // We render the seekbar waveform client-side instead (generateWaveform /
+    // generateChiptuneWaveform → pbar.loadwaves(data:…)). Wrap loadwaves to
+    // drop server th=p URLs while letting our data: URLs through, so the
+    // waveform still shows and the 404 noise disappears.
+    function patchLoadwaves() {
+        if (!window.pbar || typeof window.pbar.loadwaves !== 'function') return false;
+        if (window.pbar._kdLoadwavesPatched) return true;
+        var orig = window.pbar.loadwaves;
+        window.pbar.loadwaves = function (url) {
+            if (typeof url === 'string' && url.indexOf('data:') !== 0 && /[?&]th=p(?:&|$)/.test(url))
+                return;
+            return orig.call(this, url);
+        };
+        window.pbar._kdLoadwavesPatched = true;
+        return true;
+    }
+
+    function tryPatchLoadwaves(retries) {
+        if (patchLoadwaves()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryPatchLoadwaves(retries + 1); }, 100);
     }
 
     // ----- client-side waveform -----
@@ -1199,10 +1238,12 @@
             tryPatchDrawpos(0);
             tryInstallWaveformHook(0);
             tryInstallSvgIcons(0);
+            tryPatchLoadwaves(0);
         });
     } else {
         tryPatchDrawpos(0);
         tryInstallWaveformHook(0);
         tryInstallSvgIcons(0);
+        tryPatchLoadwaves(0);
     }
 })();

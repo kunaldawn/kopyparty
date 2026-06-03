@@ -7010,7 +7010,7 @@ var treectl = (function () {
 
 		ebi('path').style.display = 'none';
 		ebi('tree').style.display = 'block';
-		window.addEventListener('scroll', onscroll);
+		scroll_listen(true);
 		window.addEventListener('resize', onresize);
 		onresize();
 		aligngriditems();
@@ -7033,7 +7033,7 @@ var treectl = (function () {
 		ebi('tree').style.display = 'none';
 		ebi('wrap').style.marginLeft = '';
 		window.removeEventListener('resize', onresize);
-		window.removeEventListener('scroll', onscroll);
+		scroll_listen(false);
 		aligngriditems();
 	};
 
@@ -7058,6 +7058,22 @@ var treectl = (function () {
 		r.textmode(!r.texts);
 	};
 	r.textmode(false);
+
+	// kd fork: window never scrolls under the themed browser layout
+	// (kd-theme.css sets html,body{overflow:hidden}); the tree (#tree) and
+	// folder pane (#wrap) each carry their own scrollbar. Bind onscroll to
+	// all three so the right-click-menu auto-close (unmenter) fires on any
+	// scroll and the tree parent-pane pinning (onscroll2 reads tree.scrollTop)
+	// actually responds to scrolling the tree. Same root cause as the
+	// lazy-load fix — upstream assumed the window is the scroll container.
+	function scroll_listen(on) {
+		var els = [window, ebi('tree'), ebi('wrap')];
+		for (var i = 0; i < els.length; i++) {
+			if (!els[i]) continue;
+			if (on) els[i].addEventListener('scroll', onscroll);
+			else els[i].removeEventListener('scroll', onscroll);
+		}
+	}
 
 	function onscroll() {
 		unmenter();
