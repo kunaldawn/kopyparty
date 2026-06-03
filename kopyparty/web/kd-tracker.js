@@ -54,6 +54,7 @@
     var bodyEl = null;
     var rafId = null;
     var prevModPtr = 0;
+    var prevTid = null;           // copyparty track id of the displayed song
     var activeChans = null;       // channel indices used in song
 
     // tape state — the [prev|cur|next] strip the body currently renders
@@ -200,6 +201,7 @@
         tapeCurLen = 0;
         prevPlayRow = -1;
         prevModPtr = 0;
+        prevTid = null;
         activeChans = null;
     }
 
@@ -490,8 +492,18 @@
         var curOrd = libopenmpt._openmpt_module_get_current_order(mp);
         var curRow = libopenmpt._openmpt_module_get_current_row(mp);
 
-        if (mp !== prevModPtr) {
+        // Detect a track change. The module pointer alone is unreliable —
+        // libopenmpt frees and recreates modules on every track, and the
+        // allocator recycles the same address (observed: only 3 distinct
+        // pointers across a dozen switches), so a new song can reuse the
+        // previous pointer and slip past an mp-only check, leaving stale
+        // active-channels / tape. copyparty's per-track id (mp.au.tid) is
+        // the authoritative signal, so reset on either changing.
+        var curTid = (window.mp && window.mp.au && window.mp.au.tid != null)
+            ? window.mp.au.tid : null;
+        if (mp !== prevModPtr || curTid !== prevTid) {
             prevModPtr = mp;
+            prevTid = curTid;
             tapeOrd = -1;
             activeChans = null;
         }

@@ -1079,6 +1079,7 @@
     // render to a 800x80 canvas, hand the data URL to pbar.loadwaves.
     // Cached per source URL so re-clicks don't re-render.
     var chiptuneWaveCache = Object.create(null);
+    var waveGenToken = 0;   // bumped per render request; stale renders self-abort
 
     function generateChiptuneWaveform(url, buffer, duration) {
         if (!url || !buffer || !isFinite(duration) || duration <= 0) return;
@@ -1097,6 +1098,13 @@
         if (!window.pbar || !window.pbar.loadwaves) return;
 
         chiptuneWaveCache[url] = 'pending';
+        // Each track play requests a waveform; only the latest should run.
+        // Bumping the token makes any in-flight render for a previous track
+        // see stale() and abort+free — otherwise rapid track-skipping stacks
+        // concurrent libopenmpt renders and spikes CPU. A superseded url
+        // drops its 'pending' marker so revisiting the track re-renders.
+        var myToken = ++waveGenToken;
+        function stale() { return myToken !== waveGenToken; }
 
         // libopenmpt rendering is synchronous and CPU-bound. The chiptune
         // playback path uses ScriptProcessorNode which runs its
@@ -1118,7 +1126,6 @@
         var peaksCount = 0;
         var curMin = 0, curMax = 0, accum = 0;
         var rendered = 0;
-        var aborted = false;
 
         function freeAll() {
             try { if (modPtr) libopenmpt._openmpt_module_destroy(modPtr); } catch (e) {}
@@ -1129,7 +1136,7 @@
         }
 
         function finalize() {
-            if (aborted) return;
+            if (stale()) { delete chiptuneWaveCache[url]; freeAll(); return; }
             try {
                 if (accum > 0 && peaksCount < W) {
                     peaks.push(curMin, curMax);
@@ -1163,7 +1170,7 @@
         }
 
         function processSlice() {
-            if (aborted) { freeAll(); return; }
+            if (stale()) { delete chiptuneWaveCache[url]; freeAll(); return; }
             var sliceStart = (typeof performance !== 'undefined' && performance.now)
                 ? performance.now() : Date.now();
             try {
@@ -1209,6 +1216,7 @@
         // already started feeding the chiptune2 ScriptProcessor before
         // we begin our render.
         setTimeout(function () {
+            if (stale()) { delete chiptuneWaveCache[url]; return; }
             try {
                 var byteArr = new Uint8Array(buffer);
                 var fileLen = byteArr.byteLength;

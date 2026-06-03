@@ -41,28 +41,34 @@
 
     // ---- performance caps ------------------------------------------------
     // butterchurn (Milkdrop) is fragment-shader + per-frame mesh-warp heavy.
-    // At 60fps × full devicePixelRatio it can take ~30ms/frame and, stacked
-    // with the chiptune ScriptProcessor (which decodes audio ON the main
-    // thread), saturates the main thread → the player lags and every core
-    // pegs. Two caps tame it with no perceptible loss for a background viz:
-    //   • render at ~30fps (halves the per-frame GPU+CPU sim cost)
-    //   • cap the render resolution: on a HiDPI display (dpr 2) Milkdrop
-    //     otherwise renders 4× the pixels for no visible benefit here.
-    var RENDER_FPS = 30;
+    // At 60fps × full devicePixelRatio × a 48×36 mesh it takes ~30ms/frame
+    // and, stacked with the chiptune ScriptProcessor (which decodes audio ON
+    // the main thread), saturates the main thread → the player lags and every
+    // core pegs (worst on machines doing software WebGL). For a background
+    // visualizer behind the tracker overlay we trade a little sharpness/
+    // smoothness for a large CPU/GPU cut on three independent axes:
+    //
+    //   • RENDER_FPS — frame rate. 24fps is still smooth for Milkdrop and is
+    //     0.4× the work of 60fps (cuts BOTH the CPU mesh sim and GPU render).
+    //   • MAX_PIXEL_RATIO — render resolution. < 1 renders the canvas BELOW
+    //     its CSS size and lets the browser upscale; 0.75 ⇒ 0.56× the
+    //     fragments at dpr 1, and on a HiDPI (dpr 2) display 0.14× vs the
+    //     uncapped 2.0. The tracker text is separate DOM, so it stays crisp.
+    //   • MESH_W/H — butterchurn evaluates the preset's per-vertex warp
+    //     equations in JS for EVERY mesh vertex EVERY frame (CPU, not GPU, so
+    //     it pegs cores even with HW accel). 48×36 = 1813 verts/frame; 24×18
+    //     = 475, ~0.26× the per-frame equation work.
+    //
+    // Net vs upstream defaults: roughly an order of magnitude less work.
+    var RENDER_FPS = 24;
     var RENDER_MIN_INTERVAL = 1000 / RENDER_FPS;
-    var MAX_PIXEL_RATIO = 1;
+    var MAX_PIXEL_RATIO = 0.75;
     var lastRenderTs = 0;
     function renderDpr() {
         return Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
     }
-    // butterchurn evaluates the preset's per-vertex warp equations in JS for
-    // EVERY mesh vertex EVERY frame — that's CPU, not GPU, so it pegs cores
-    // even when the canvas is hardware-accelerated. The default 48×36 mesh
-    // is 1813 vertices/frame; 32×24 (the classic Milkdrop default) is ~825,
-    // roughly halving the per-frame CPU with no meaningful visual loss for a
-    // background visualizer.
-    var MESH_W = 32;
-    var MESH_H = 24;
+    var MESH_W = 24;
+    var MESH_H = 18;
 
     // auto-cycle: randomly swap preset on a fixed interval (and on
     // track change). Persisted to localStorage so the user's choice
