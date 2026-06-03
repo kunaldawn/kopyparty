@@ -1557,6 +1557,11 @@ html#ht_spl body {
     width: 8.2em;            /* matches body cell width */
     text-align: center;
     border-right: 1px solid rgba(0, 255, 150, 0.08);
+    /* channel names (from the module) can be long — clip so the header
+       columns stay aligned with the body's fixed-width cells. */
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 #ht_brw #kd-tracker .kd-tracker-cols .cell:last-child {
     border-right: none;

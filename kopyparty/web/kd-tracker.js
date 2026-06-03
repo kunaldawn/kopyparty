@@ -37,7 +37,14 @@
 //   _openmpt_module_get_pattern_num_rows(modPtr, pat)
 //   _openmpt_module_get_pattern_row_channel_command(modPtr, pat, row,
 //                                                   chan, cmd)
-//     cmd 0=note, 1=instr, 2=volume-col, 3=effect-type, 4=effect-param
+//     cmd 0=note  1=instrument  2=volume-effect (VolumeCommand type)
+//         3=effect (EffectCommand type)  4=volume value  5=effect param
+//   (libopenmpt's OPENMPT_MODULE_COMMAND_* enum — verified empirically:
+//    a "set volume = v0F" cell reads c2=1, c4=15; an "O04" sample-offset
+//    reads c3=10 (CMD_OFFSET), c5=4. The cmd-3 integer is OpenMPT's
+//    internal EffectCommand enum, mapped to Furnace effect-colour
+//    categories below. Exact glyphs for effect letters and special
+//    notes come from libopenmpt's own formatter.)
 
 (function () {
     'use strict';
@@ -62,26 +69,55 @@
     // ---- libopenmpt formatters (Furnace-style) -------------------------
     var NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
     function fmtNote(n) {
-        if (n <= 0) return '...';
-        if (n === 254) return '^^^';   // note cut (libopenmpt convention)
-        if (n === 255) return '===';   // note off / release
-        // openmpt note numbering: 1 = C-0, 13 = C-1, …, 61 = C-5.
+        // regular notes only (1..120). openmpt note numbering: 61 = C-5,
+        // so 1 = C-0. Special notes (key-off / cut / fade / PC) are >120
+        // and rendered via libopenmpt's own glyph — see noteText().
         var idx = (n - 1) % 12;
         var oct = Math.floor((n - 1) / 12);
         return NOTE_NAMES[idx] + oct;
     }
-    function fmtHex2(v) {
-        if (v === 0) return '..';
-        return ('0' + v.toString(16).toUpperCase()).slice(-2);
+    // 2-digit hex that always renders the value, including 0 → "00". Used
+    // for the volume value and effect parameter: once the field is known
+    // to be present (a volume/effect command exists), a 0 is a real "00",
+    // not an empty cell — libopenmpt prints it that way too.
+    function hex2(v) {
+        return ('0' + (v & 0xFF).toString(16).toUpperCase()).slice(-2);
     }
-    function fmtVol(v) {
-        if (v <= 0) return '..';
-        return ('0' + v.toString(16).toUpperCase()).slice(-2);
+
+    // Read a C string pointer from the emscripten heap. This build does
+    // NOT expose libopenmpt.UTF8ToString on the module object, so probe
+    // the known aliases (resolved lazily once the runtime is up).
+    function rdStr(ptr) {
+        if (!ptr) return '';
+        var L = window.libopenmpt;
+        var fn = (typeof L.UTF8ToString === 'function') ? L.UTF8ToString
+               : (typeof L.Pointer_stringify === 'function') ? L.Pointer_stringify
+               : (typeof window.UTF8ToString === 'function') ? window.UTF8ToString
+               : null;
+        return fn ? fn(ptr) : '';
     }
-    // Furnace prints both effect type and param as 2-digit upper hex
-    // (`pattern.cpp` uses "%.2X" for both). Empty → '..' per side.
-    function fmtFxType(t) { return t === 0 ? '..' : fmtHex2(t); }
-    function fmtFxParam(p) { return p === 0 ? '..' : fmtHex2(p); }
+
+    // Pull the exact display glyph libopenmpt would print for one command
+    // of one cell (note off "===", cut "^^^", fade "~~~", PC notes, and
+    // the format-native effect letter such as IT "O" / MOD "9"). Allocates
+    // an openmpt string we must free; only called for the minority of
+    // cells that actually carry a special note or an effect.
+    function fmtCmdStr(mp, pat, row, ch, cmd) {
+        var ptr = libopenmpt._openmpt_module_format_pattern_row_channel_command(mp, pat, row, ch, cmd);
+        if (!ptr) return '';
+        var s = rdStr(ptr);
+        if (libopenmpt._openmpt_free_string) libopenmpt._openmpt_free_string(ptr);
+        return (s || '').replace(/^\s+|\s+$/g, '');
+    }
+
+    // note text for a cell: empty, a regular note, or libopenmpt's exact
+    // special-note glyph (>120 == key-off/cut/fade/PC*).
+    function noteText(mp, pat, row, ch, n) {
+        if (n <= 0) return '...';
+        if (n <= 120) return fmtNote(n);
+        var s = fmtCmdStr(mp, pat, row, ch, 0);
+        return s || '===';
+    }
 
     function isChiptunePlaying() {
         if (!window.kdChiptune || !window.kdChiptune.ChiptuneAudio) return false;
@@ -183,29 +219,66 @@
     }
 
     // ---- effect-type → Furnace category --------------------------------
-    // Mirrors guiConst.cpp's effectColor[] table for low effect types.
-    var EFFECT_COLOR_SUFFIX = [
-        'misc',    // 00
-        'pitch',   // 01
-        'pitch',   // 02
-        'pitch',   // 03
-        'pitch',   // 04
-        'volume',  // 05
-        'volume',  // 06
-        'volume',  // 07
-        'panning', // 08
-        'speed',   // 09
-        'volume',  // 0A
-        'song',    // 0B
-        'time',    // 0C
-        'song',    // 0D
-        'invalid', // 0E
-        'speed'    // 0F
-    ];
+    // The cmd-3 integer is OpenMPT's internal EffectCommand enum (NOT the
+    // format-native letter, and NOT Furnace's effect numbering). We map it
+    // to Furnace's effect-colour buckets (guiConst.cpp: PITCH / VOLUME /
+    // PANNING / SPEED / SONG / TIME / MISC / SYS / INVALID) so each effect
+    // gets the colour Furnace would give the equivalent operation.
+    // Enum values per OpenMPT soundlib/modcommand.h (stable for the common
+    // 1..37 since the ModPlug era; the test build agrees — CMD_OFFSET=10,
+    // CMD_CHANNELVOLUME=21). Unknown → 'sysprim'.
+    var FX_CAT = {
+        1: 'misc',     // ARPEGGIO
+        2: 'pitch',    // PORTAMENTOUP
+        3: 'pitch',    // PORTAMENTODOWN
+        4: 'pitch',    // TONEPORTAMENTO
+        5: 'pitch',    // VIBRATO
+        6: 'volume',   // TONEPORTAVOL  (porta + vol-slide)
+        7: 'volume',   // VIBRATOVOL    (vibrato + vol-slide)
+        8: 'volume',   // TREMOLO
+        9: 'panning',  // PANNING8
+        10: 'misc',    // OFFSET
+        11: 'volume',  // VOLUMESLIDE
+        12: 'song',    // POSITIONJUMP
+        13: 'volume',  // VOLUME
+        14: 'song',    // PATTERNBREAK
+        15: 'misc',    // RETRIG
+        16: 'speed',   // SPEED  (ticks/row)
+        17: 'time',    // TEMPO  (BPM)
+        18: 'volume',  // TREMOR
+        19: 'misc',    // MODCMDEX  (Exy extended)
+        20: 'misc',    // S3MCMDEX  (Sxy extended)
+        21: 'volume',  // CHANNELVOLUME
+        22: 'volume',  // CHANNELVOLSLIDE
+        23: 'volume',  // GLOBALVOLUME
+        24: 'volume',  // GLOBALVOLSLIDE
+        25: 'misc',    // KEYOFF
+        26: 'pitch',   // FINEVIBRATO
+        27: 'panning', // PANBRELLO
+        28: 'pitch',   // XFINEPORTAUPDOWN
+        29: 'panning', // PANNINGSLIDE
+        30: 'misc',    // SETENVPOSITION
+        31: 'misc',    // MIDI
+        32: 'misc',    // SMOOTHMIDI
+        33: 'misc',    // DELAYCUT
+        34: 'misc',    // XPARAM
+        35: 'pitch',   // FINETUNE
+        36: 'pitch',   // FINETUNE_SMOOTH
+        37: 'invalid', // DUMMY
+        38: 'pitch', 39: 'pitch', 40: 'pitch', 41: 'pitch', // NOTESLIDE*
+        42: 'misc', 43: 'misc', 44: 'misc', 45: 'misc',
+        46: 'volume',  // VOLUME8
+        47: 'misc',    // HMN_MEGA_ARP
+        48: 'misc',    // MED_SYNTH_JUMP
+        49: 'volume',  // AUTO_VOLUMESLIDE
+        50: 'pitch', 51: 'pitch', 52: 'pitch', 53: 'pitch', 54: 'pitch', // AUTO_PORTA*
+        55: 'pitch',   // TONEPORTA_DURATION
+        56: 'volume',  // VOLUMEDOWN_DURATION
+        57: 'volume'   // VOLUMEDOWN_ETX
+    };
     function effectColorClass(typ) {
         if (typ <= 0) return 'misc';
-        if (typ < EFFECT_COLOR_SUFFIX.length) return EFFECT_COLOR_SUFFIX[typ];
-        return 'sysprim';
+        return FX_CAT[typ] || 'sysprim';
     }
 
     // Volume colour gradient — Furnace lerps PATTERN_VOLUME_MIN..MAX
@@ -236,30 +309,34 @@
             html += '<span class="rowidx">' + rowIdx + '</span>';
             for (var k = 0; k < chans.length; k++) {
                 var ch = chans[k];
-                var note = getCmd(mp, pat, r, ch, 0);
-                var inst = getCmd(mp, pat, r, ch, 1);
-                var vol  = getCmd(mp, pat, r, ch, 2);
-                var fxt  = getCmd(mp, pat, r, ch, 3);
-                var fxp  = getCmd(mp, pat, r, ch, 4);
+                // correct libopenmpt command indices (see file header):
+                var note   = getCmd(mp, pat, r, ch, 0);   // note
+                var inst   = getCmd(mp, pat, r, ch, 1);   // instrument
+                var volCmd = getCmd(mp, pat, r, ch, 2);   // volume-effect type
+                var fxt    = getCmd(mp, pat, r, ch, 3);   // effect type
+                var volVal = getCmd(mp, pat, r, ch, 4);   // volume value
+                var fxp    = getCmd(mp, pat, r, ch, 5);   // effect param
 
-                var noteTxt = fmtNote(note);
-                var instTxt = fmtHex2(inst);
-                var volTxt = fmtVol(vol);
-                var fxtTxt = fmtFxType(fxt);
-                var fxpTxt = fmtFxParam(fxp);
+                var hasVol = (volCmd > 0 || volVal > 0);
+                var hasFx  = (fxt > 0);
 
-                var clsN = note > 0 && note < 254 ? 'note' :
-                           (note >= 254 ? 'note-special' : 'inactive');
+                var noteTxt = noteText(mp, pat, r, ch, note);
+                var instTxt = inst > 0 ? hex2(inst) : '..';
+                var volTxt  = hasVol ? hex2(volVal) : '..';
+                // effect: format-native letter (IT "O", MOD "9", …) + param
+                var fxtTxt  = hasFx ? fmtCmdStr(mp, pat, r, ch, 3) : '.';
+                var fxpTxt  = hasFx ? hex2(fxp) : '..';
+
+                var clsN = note <= 0 ? 'inactive' : (note > 120 ? 'note-special' : 'note');
                 var clsI = inst > 0 ? 'inst' : 'inactive';
-                var clsV = vol > 0 ? 'volume' : 'inactive';
+                var clsV = hasVol ? 'volume' : 'inactive';
                 var fxColor = effectColorClass(fxt);
-                var hasFx = (fxt > 0 || fxp > 0);
                 var clsFt = hasFx ? ('fx fx-' + fxColor) : 'inactive';
                 var clsFp = hasFx ? ('fx fx-' + fxColor) : 'inactive';
 
                 var volStyle = '';
-                if (vol > 0) {
-                    var shade = volumeShade(vol);
+                if (hasVol) {
+                    var shade = volumeShade(volVal);
                     if (shade) volStyle = ' style="color:' + shade + '"';
                 }
 
@@ -276,10 +353,33 @@
         return { html: html, rows: nrows };
     }
 
-    function buildHeader(chans) {
+    // channel label: libopenmpt channel name when the module defines one
+    // (IT/XM/MPTM often do — Furnace shows these), else the 1-based number.
+    function channelLabel(mp, ch) {
+        var num = ('0' + (ch + 1)).slice(-2);
+        try {
+            var ptr = libopenmpt._openmpt_module_get_channel_name(mp, ch);
+            if (ptr) {
+                var s = rdStr(ptr);
+                if (libopenmpt._openmpt_free_string) libopenmpt._openmpt_free_string(ptr);
+                s = (s || '').replace(/^\s+|\s+$/g, '');
+                if (s) return esc(num + ' ' + s);
+            }
+        } catch (e) {}
+        return num;
+    }
+
+    function esc(s) {
+        return String(s).replace(/[&<>"]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
+    }
+
+    function buildHeader(mp, chans) {
         var h = '<span class="rowidx">  </span>';
         for (var ci = 0; ci < chans.length; ci++) {
-            h += '<span class="cell">' + ('0' + (chans[ci] + 1)).slice(-2) + '</span>';
+            h += '<span class="cell" title="' + esc(channelLabel(mp, chans[ci])) + '">' +
+                 channelLabel(mp, chans[ci]) + '</span>';
         }
         headEl.innerHTML = h;
     }
@@ -287,7 +387,7 @@
     // Build the [prev | cur | next] tape. Called when order changes.
     function rebuildTape(mp, ord) {
         if (!activeChans) activeChans = computeActiveChannels(mp);
-        buildHeader(activeChans);
+        buildHeader(mp, activeChans);
 
         var nords = libopenmpt._openmpt_module_get_num_orders(mp);
         var prevOrdIdx = ord - 1;
