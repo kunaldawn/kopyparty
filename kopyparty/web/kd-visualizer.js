@@ -39,6 +39,31 @@
     var presetIdx = 0;
     var connectedSrc = null;
 
+    // ---- performance caps ------------------------------------------------
+    // butterchurn (Milkdrop) is fragment-shader + per-frame mesh-warp heavy.
+    // At 60fps × full devicePixelRatio it can take ~30ms/frame and, stacked
+    // with the chiptune ScriptProcessor (which decodes audio ON the main
+    // thread), saturates the main thread → the player lags and every core
+    // pegs. Two caps tame it with no perceptible loss for a background viz:
+    //   • render at ~30fps (halves the per-frame GPU+CPU sim cost)
+    //   • cap the render resolution: on a HiDPI display (dpr 2) Milkdrop
+    //     otherwise renders 4× the pixels for no visible benefit here.
+    var RENDER_FPS = 30;
+    var RENDER_MIN_INTERVAL = 1000 / RENDER_FPS;
+    var MAX_PIXEL_RATIO = 1;
+    var lastRenderTs = 0;
+    function renderDpr() {
+        return Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+    }
+    // butterchurn evaluates the preset's per-vertex warp equations in JS for
+    // EVERY mesh vertex EVERY frame — that's CPU, not GPU, so it pegs cores
+    // even when the canvas is hardware-accelerated. The default 48×36 mesh
+    // is 1813 vertices/frame; 32×24 (the classic Milkdrop default) is ~825,
+    // roughly halving the per-frame CPU with no meaningful visual loss for a
+    // background visualizer.
+    var MESH_W = 32;
+    var MESH_H = 24;
+
     // auto-cycle: randomly swap preset on a fixed interval (and on
     // track change). Persisted to localStorage so the user's choice
     // survives reloads.
@@ -247,8 +272,10 @@
             viz = bc.createVisualizer(ctx, canvas, {
                 width: canvas.width,
                 height: canvas.height,
-                pixelRatio: window.devicePixelRatio || 1,
-                textureRatio: 1
+                pixelRatio: renderDpr(),
+                textureRatio: 1,
+                meshWidth: MESH_W,
+                meshHeight: MESH_H
             });
         } catch (e) {
             console.warn('kdVisualizer createVisualizer failed:', e);
@@ -585,7 +612,7 @@
     function resizeCanvas() {
         if (!canvas) return;
         var r = canvas.getBoundingClientRect();
-        var dpr = window.devicePixelRatio || 1;
+        var dpr = renderDpr();
         var w = Math.max(64, Math.floor(r.width));
         var h = Math.max(64, Math.floor(r.height));
         var W = Math.floor(w * dpr);
@@ -594,14 +621,32 @@
             canvas.width = W;
             canvas.height = H;
             if (viz && typeof viz.setRendererSize === 'function') {
-                try { viz.setRendererSize(W, H); } catch (e) {}
+                // butterchurn's setRendererSize(w, h, opts) dereferences
+                // opts.meshWidth unconditionally — calling it without opts
+                // throws (and the throw was silently swallowed, so the GL
+                // viewport never actually resized). Pass our mesh + capped
+                // pixelRatio so resize/fullscreen keeps the perf caps.
+                try {
+                    viz.setRendererSize(W, H, {
+                        pixelRatio: dpr,
+                        meshWidth: MESH_W,
+                        meshHeight: MESH_H
+                    });
+                } catch (e) {}
             }
         }
     }
 
-    function renderLoop() {
+    function renderLoop(ts) {
         rafId = requestAnimationFrame(renderLoop);
         if (!viz || !panel || !panel.classList.contains('kd-viz-open')) return;
+        // throttle to ~RENDER_FPS — skip the heavy render on in-between
+        // frames so the main thread (and the chiptune audio callback) keep
+        // their slice. The "- 2" gives a little slack so 16.7ms-quantised
+        // rAF ticks don't quantise us down to 20fps.
+        var now = ts || performance.now();
+        if (now - lastRenderTs < RENDER_MIN_INTERVAL - 2) return;
+        lastRenderTs = now;
         try { viz.render(); } catch (e) {}
     }
 

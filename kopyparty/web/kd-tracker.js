@@ -161,6 +161,16 @@
         bodyEl.addEventListener('scroll', function () {
             headEl.scrollLeft = bodyEl.scrollLeft;
         });
+        // recompute the centring padding only when the body actually
+        // resizes (drag-resize, fullscreen, window resize) instead of every
+        // animation frame — keeps the tick's hot path free of layout reads.
+        if (window.ResizeObserver) {
+            var ro = new ResizeObserver(function () {
+                prevTapePad = -1;
+                applyBodyPadding();
+            });
+            ro.observe(bodyEl);
+        }
         var toggleBtn = panel.querySelector('.kd-tracker-toggle');
         toggleBtn.addEventListener('click', function (e) {
             e.preventDefault();
@@ -453,8 +463,21 @@
         prevPlayRow = orderRelativeIdx;
     }
 
-    function tick() {
+    // Rows advance at most ~20×/s even on fast modules, so polling at 60fps
+    // is pure waste (and keeps the main thread busy alongside the chiptune
+    // audio callback + visualizer). Cap the work to ~30fps. Body-padding is
+    // no longer recomputed here every frame — a ResizeObserver handles size
+    // changes (see buildPanel) — removing a per-frame layout read.
+    var TICK_FPS = 30;
+    var TICK_MIN_INTERVAL = 1000 / TICK_FPS;
+    var lastTickTs = 0;
+
+    function tick(ts) {
         rafId = requestAnimationFrame(tick);
+
+        var now = ts || performance.now();
+        if (now - lastTickTs < TICK_MIN_INTERVAL - 2) return;
+        lastTickTs = now;
 
         if (!isChiptunePlaying()) {
             if (panel && panel.classList.contains('kd-tracker-on')) hidePanel();
@@ -477,9 +500,6 @@
             rebuildTape(mp, curOrd);
             panel.classList.add('kd-tracker-on');
         }
-
-        // body might have resized (panel drag, window resize, fullscreen)
-        applyBodyPadding();
 
         if (curRow !== prevPlayRow && curRow >= 0 && curRow < tapeCurLen) {
             highlightRow(curRow);
