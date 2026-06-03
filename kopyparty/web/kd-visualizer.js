@@ -617,7 +617,22 @@
         }
         buildPanel();
         loadDeps().then(function () {
-            ensureViz();
+            // ensureViz() needs window.kdAudio.context, which only exists
+            // once playback has wired up an audio source (chiptune player
+            // or the MediaElementSource wrap on mp.au). On a first open —
+            // especially right after pressing play, before the source is
+            // live — it can legitimately return false. Originally this was
+            // a one-shot call, so a single miss left viz=null and the panel
+            // permanently black until it was closed and reopened. Retry on
+            // a short timer so the visualizer self-heals as soon as the
+            // context appears.
+            if (!ensureViz()) {
+                var tries = 0;
+                var iv = setInterval(function () {
+                    if (ensureViz() || !isOpen() || ++tries > 50)
+                        clearInterval(iv);
+                }, 100);
+            }
             panel.classList.add('kd-viz-open');
             // wait for the height transition to complete before sizing
             // the GL canvas to its final dimensions.
@@ -729,7 +744,13 @@
         // randomise the preset for a "fresh look per track" feel.
         onAudioChanged: function () {
             connectedSrc = null;
-            if (viz && isOpen()) connectAudio(true);
+            // If the panel is open but viz never initialized (e.g. it was
+            // opened before any audio source existed), build it now that a
+            // source is live. Otherwise just rewire to the new source.
+            if (isOpen()) {
+                if (viz) connectAudio(true);
+                else ensureViz();
+            }
             if (autoCycle && viz && isOpen()) {
                 randomPreset();
             }

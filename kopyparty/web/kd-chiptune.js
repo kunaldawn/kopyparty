@@ -513,7 +513,17 @@
                 return origPlay.apply(this, arguments);
             }
 
-            // Tracker path. Load libs (lazy) then play.
+            // Tracker path. Open the music widget right away so the user
+            // gets immediate feedback: libopenmpt.js is ~2.2 MB and on a
+            // cold cache / new session the download can take several
+            // seconds, during which widget.open() (deferred until inside
+            // playTracker, after loadLibs resolves) made the player appear
+            // to do nothing — the most visible "music player doesn't show"
+            // symptom. Opening here is idempotent (widget.set short-circuits
+            // when already open) and harmless if the load later fails.
+            try { window.widget.open(); } catch (e) {}
+
+            // Load libs (lazy) then play.
             loadLibs().then(function () {
                 playTracker(tn, seek);
             }).catch(function (err) {
@@ -672,18 +682,52 @@
         setTimeout(function () { tryPatchReadOrder(retries + 1); }, 100);
     }
 
+    // ----- re-apply the per-instance patches on every folder navigation.
+    // copyparty's reload_mp() does `mp = new MPlayer()` on each in-app
+    // navigation (and on column re-sort). Our patchMp* helpers stamp a
+    // done-flag on the mp INSTANCE and tryPatch* stops polling after the
+    // first success, so the fresh MPlayer created on navigation arrives
+    // UNPATCHED — set_ev no longer wraps the visualizer source, read_order
+    // no longer strips video / hides the empty widget, and preload no
+    // longer suppresses the dead ?th=p waveform fetch. Wrapping the global
+    // reload_mp() (which is stable — never reassigned) lets us re-stamp the
+    // new instance immediately after it's built.
+    function patchReloadMp() {
+        if (typeof window.reload_mp !== 'function') return false;
+        if (window.reload_mp._kdWrapped) return true;
+        var orig = window.reload_mp;
+        window.reload_mp = function () {
+            var ret = orig.apply(this, arguments);
+            // mp now points at the freshly-created MPlayer — re-stamp it.
+            try { patchMpSetEv(); } catch (e) {}
+            try { patchMpPreload(); } catch (e) {}
+            try { patchReadOrder(); } catch (e) {}
+            return ret;
+        };
+        window.reload_mp._kdWrapped = true;
+        return true;
+    }
+
+    function tryPatchReloadMp(retries) {
+        if (patchReloadMp()) return;
+        if (retries > 100) return;
+        setTimeout(function () { tryPatchReloadMp(retries + 1); }, 100);
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             tryInstall(0);
             tryPatchMpSetEv(0);
             tryPatchMpPreload(0);
             tryPatchReadOrder(0);
+            tryPatchReloadMp(0);
         });
     } else {
         tryInstall(0);
         tryPatchMpSetEv(0);
         tryPatchMpPreload(0);
         tryPatchReadOrder(0);
+        tryPatchReloadMp(0);
     }
 
     // Expose a few helpers for debugging from the console.

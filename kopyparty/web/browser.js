@@ -1436,7 +1436,11 @@ var mpl = (function () {
 	bcfg_bind(r, 'follow', 'au_follow', false, setaufollow);
 	bcfg_bind(r, 'ac_flac', 'ac_flac', true);
 	bcfg_bind(r, 'ac_aac', 'ac_aac', false);
-	bcfg_bind(r, 'ac_oth', 'ac_oth', true, reload_mp);
+	// kd fork: call through the identifier (not a captured reference) so the
+	// kd-chiptune wrapper that re-applies our MPlayer patches on each
+	// reload_mp() is honored — binding `reload_mp` directly would freeze the
+	// pre-wrap function and leave the new player unpatched on ac_oth toggle.
+	bcfg_bind(r, 'ac_oth', 'ac_oth', true, function () { reload_mp(); });
 	if (!have_acode)
 		r.ac_flac = r.ac_aac = r.ac_oth = false;
 
@@ -7424,7 +7428,7 @@ var treectl = (function () {
 		clearTimeout(mpl.t_eplay);
 		enspin('t');
 		enspin('f');
-		window.removeEventListener('scroll', r.tscroll);
+		r.lazy_listen(false);
 	}
 
 	function treegrow(e) {
@@ -7698,7 +7702,7 @@ var treectl = (function () {
 		if (r.trunc) {
 			r.setlazy(plain);
 			if (!r.ask) {
-				window.addEventListener('scroll', r.tscroll);
+				r.lazy_listen(true);
 				setTimeout(r.tscroll, 100);
 			}
 		}
@@ -7820,7 +7824,7 @@ var treectl = (function () {
 	};
 
 	r.showmore = function (n, cb) {
-		window.removeEventListener('scroll', r.tscroll);
+		r.lazy_listen(false);
 		console.log('nvis {0} -> {1}'.format(r.nvis, n));
 		r.nvis = n;
 		ebi('lazy').innerHTML = '';
@@ -7834,18 +7838,36 @@ var treectl = (function () {
 		}, 1);
 	};
 
+	// kd fork: the themed browser layout (kd-theme.css) sets
+	// html,body{overflow:hidden} and makes #wrap the sole vertical scroll
+	// surface, so window 'scroll' events never fire and yscroll() stays 0.
+	// Listen on #wrap (falling back to window for the no-theme / splash
+	// case) so the lazy-load sentinel still triggers.
+	r.lazy_listen = function (on) {
+		var wrap = ebi('wrap');
+		if (on) {
+			window.addEventListener('scroll', r.tscroll);
+			if (wrap) wrap.addEventListener('scroll', r.tscroll);
+		}
+		else {
+			window.removeEventListener('scroll', r.tscroll);
+			if (wrap) wrap.removeEventListener('scroll', r.tscroll);
+		}
+	};
+
 	r.tscroll = function () {
 		var el = r.trunc ? ebi('plazy') : null;
 		if (!el || ebi('lazy').style.display || ebi('unsearch'))
 			return;
 
-		var sy = yscroll() + window.innerHeight,
-			ty = el.offsetTop;
-
-		if (sy <= ty)
+		// viewport-relative test works regardless of which element is the
+		// scroll container (window in upstream, #wrap in the kd theme).
+		// upstream used `yscroll() + innerHeight > el.offsetTop`, which is
+		// always false here because yscroll() is pinned at 0.
+		if (el.getBoundingClientRect().top > window.innerHeight + 100)
 			return;
 
-		window.removeEventListener('scroll', r.tscroll);
+		r.lazy_listen(false);
 
 		var all = r.lsc.files.length + r.lsc.dirs.length;
 		if (r.nvis * 16 <= all) {
