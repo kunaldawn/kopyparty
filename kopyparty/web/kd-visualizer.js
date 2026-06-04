@@ -742,9 +742,10 @@
             panel.classList.add('kd-viz-open');
             updateLargeButtonState();
             updateOccupy();
-            // wait for the height transition to complete before sizing
-            // the GL canvas to its final dimensions.
-            setTimeout(function () { resizeCanvas(); }, 380);
+            // wait for the height transition to complete before sizing the GL
+            // canvas and re-publishing the occupy height (offsetHeight is mid-
+            // transition right after adding the class).
+            setTimeout(function () { resizeCanvas(); updateOccupy(); }, 380);
             if (rafId === null) renderLoop();
             updateToggleState();
             updateTrackName();
@@ -782,9 +783,14 @@
     // Publish how much vertical space the panel occupies so the file
     // browser can reserve room above it (keeps grid items clickable).
     // 0 in windowed mode -> layout unchanged.
+    // Reserve file-browser space above the panel whenever it's open (windowed
+    // OR large) so the grid ends a small gap above the visualizer instead of
+    // being overlapped by it. The +12 is that visible gap; 0 when closed /
+    // fullscreen so normal layout is untouched.
+    var VIZ_GAP = 12;
     function updateOccupy() {
-        var px = (isLarge() && isOpen() && !document.fullscreenElement)
-            ? (panel.offsetHeight + 'px') : '0px';
+        var px = (isOpen() && !document.fullscreenElement)
+            ? (panel.offsetHeight + VIZ_GAP + 'px') : '0px';
         try { document.documentElement.style.setProperty('--kd-viz-occupy', px); } catch (e) {}
     }
 
