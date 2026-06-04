@@ -219,6 +219,41 @@ Inside, `#np_inf` (the metadata panel with thumbnail) is permanently hidden;
 only `#pctl` (play controls), `#barbuf` (progress), `#pvol` (volume) show.
 The widget is wrapped in a rounded neon panel via `#widgeti` styling.
 
+### Chiptune visualizer + tracker (`kd-chiptune.js`, `kd-visualizer.js`, `kd-tracker.js`)
+
+Fork-only feature stack layered on the music widget. **Not upstream — don't
+remove.**
+
+- `kd-chiptune.js` — plays tracker modules (.mod/.it/.s3m/.xm/.mptm/…) via
+  libopenmpt (WASM) + chiptune2 behind an `HTMLAudioElement`-shaped shim
+  (`ChiptuneAudio`). Owns the shared `window.kdAudio.context` that both the
+  visualizer and tracker tap.
+- `kd-visualizer.js` — butterchurn (Milkdrop) WebGL panel `#kd-viz-panel`.
+  Three states: **windowed → large → OS-fullscreen**. Large mode
+  (`.kd-viz-large`, `L` key) is a tall in-tab overlay; it publishes its height
+  to `--kd-viz-occupy`, which the `html#ht_brw.np_open #wrap` margin adds to its
+  bottom reservation so the file browser ends *above* the panel and grid items
+  stay clickable. `Escape` steps down one level. Preset name pill is fixed-width
+  with a marquee for long names; the search dropdown is infinite-scroll over the
+  full local preset list (no row cap). All offline.
+- `kd-tracker.js` — compact **channel-tile grid** `#kd-tracker` (one tile per
+  channel: number · live note · instrument · VU bar), max 8 columns, wrapping so
+  every channel is visible; grid scrolls vertically for high-channel modules. The
+  titlebar doubles as an **FFT spectrum-bar** display. A bottom status bar shows
+  BPM/speed/order/pattern/row/channels/counts/format/time. Draggable;
+  `kdTracker.clampPosition()` pulls it back into the panel after fullscreen exit.
+  Reads libopenmpt getters (`get_current_*`, per-channel
+  `get_current_channel_vu_left/right`, `get_metadata`).
+
+**Performance is load-bearing here.** The tracker sits over the 60fps-animating
+WebGL canvas. Two rules keep it from pegging the compositor: (1) **no
+`backdrop-filter`** on any viz/tracker overlay (the PERFORMANCE block near the
+bottom of `kd-theme.css` forces `backdrop-filter: none` — a blur over the
+animating canvas forces a per-frame re-blur and was a major lag source); and (2)
+the tracker renders only ~one node per channel (a few hundred total) and updates
+text on row changes — an earlier full scrolling-pattern view rendered tens of
+thousands of nodes and lagged hard while open. Don't reintroduce either.
+
 ### Directory cache (`kd-dircache`)
 
 The fork is meant to run off a **slow USB HDD** whose contents rarely change.
