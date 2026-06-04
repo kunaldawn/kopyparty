@@ -26,6 +26,10 @@
     var SVG_LARGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M8 3H5a2 2 0 0 0-2 2v3 M16 3h3a2 2 0 0 1 2 2v3 M8 21H5a2 2 0 0 1-2-2v-3 M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
     var SVG_CLOSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><polygon points="6,9 18,9 12,17"/></svg>';
     var SVG_VOL = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block"><polygon points="3,10 3,14 7,14 12,18 12,6 7,10"/><path d="M15.5 12 a3 3 0 0 0 -1.5 -2.6 v5.2 a3 3 0 0 0 1.5 -2.6 z M17.5 12 a5 5 0 0 0 -3.5 -4.8 v1.6 a3.5 3.5 0 0 1 0 6.4 v1.6 a5 5 0 0 0 3.5 -4.8 z"/></svg>';
+    // restart-from-start: bar + left-pointing triangle (skip-to-beginning)
+    var SVG_RESTART = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><rect x="5" y="5" width="2.6" height="14"/><polygon points="20,5 20,19 9,12"/></svg>';
+    // share: two nodes joined by a link (copy shareable URL)
+    var SVG_SHARE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.8 15.7 6.3 M8.3 13.2 15.7 17.7"/></svg>';
 
     var depsLoaded = false;
     var depsLoading = null;
@@ -202,6 +206,8 @@
                 '<a href="#" id="kd-viz-auto" title="auto-cycle on/off (A)">' + SVG_AUTO + '</a>' +
                 '<a href="#" id="kd-viz-interval" title="cycle interval (click to change)"><span>' + fmtIntervalLabel(AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx]) + '</span></a>' +
                 '<a href="#" id="kd-viz-next" title="next preset (right arrow)">' + SVG_NEXT + '</a>' +
+                '<a href="#" id="kd-viz-restart" title="play current track from the start (Home)">' + SVG_RESTART + '</a>' +
+                '<a href="#" id="kd-viz-share" title="copy a shareable link with the current track + visualizer setup">' + SVG_SHARE + '</a>' +
                 '<a href="#" id="kd-viz-large" title="larger view (L)">' + SVG_LARGE + '</a>' +
                 '<a href="#" id="kd-viz-fs" title="fullscreen (F)">' + SVG_FS + '</a>' +
                 '<a href="#" id="kd-viz-close" title="close (Escape)">' + SVG_CLOSE + '</a>' +
@@ -234,6 +240,8 @@
         on('kd-viz-rand', function () { randomPreset(); });
         on('kd-viz-auto', function () { setAutoCycle(!autoCycle); });
         on('kd-viz-interval', cycleInterval);
+        on('kd-viz-restart', restartTrack);
+        on('kd-viz-share', shareLink);
         on('kd-viz-large', toggleLarge);
         on('kd-viz-fs', toggleFullscreen);
         on('kd-viz-close', closePanel);
@@ -933,7 +941,173 @@
         else if (e.key === 'a' || e.key === 'A') setAutoCycle(!autoCycle);
         else if (e.key === 'l' || e.key === 'L') toggleLarge();
         else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+        else if (e.key === 'Home') { e.preventDefault(); restartTrack(); }
     });
+
+    // ----- restart current track from the start (recording helper) -----
+    // Workflow: pick a track, get the screen-recorder rolling, then hit this
+    // (button or Home key) to play the song cleanly from 0:00 on camera.
+    function restartTrack() {
+        if (!window.mp || !window.mp.au) return;
+        try {
+            if (typeof window.seek_au_sec === 'function') {
+                window.seek_au_sec(0);            // seeks to 0 and fades in if paused
+            } else {
+                window.mp.au.currentTime = 0;
+            }
+            if (window.mp.au.paused && window.mp.au.play) window.mp.au.play();
+        } catch (e) { console.warn('kdVisualizer restart failed:', e); }
+    }
+
+    // ----- shareable config URL -----
+    // Encode the visualizer + tracker setup into a compact, URL-safe blob
+    // ([a-z0-9_] only, no percent-encoding needed) under the `kv` query
+    // param, paired with the playing track in the hash (#a<tid>, which
+    // copyparty's own eval_hash restores on the friend's load). `v` is a
+    // reserved copyparty param (markdown-standalone), so we use `kv`.
+    function buildShareConfig() {
+        var parts = [];
+        parts.push('o1');                                   // panel open
+        // fullscreen can't be auto-entered without a user gesture, so a
+        // fullscreen sender shares as "large" (the closest restorable state).
+        parts.push('m' + ((isLarge() || document.fullscreenElement) ? 'l' : 'w'));
+        parts.push('a' + (autoCycle ? '1' : '0'));
+        parts.push('i' + autoIntervalIdx);
+        if (presetKeys && presetKeys.length) parts.push('p' + presetIdx);
+        var tc = window.kdTracker && window.kdTracker.getConfig && window.kdTracker.getConfig();
+        if (tc) {
+            parts.push('s' + Math.round(tc.scale * 100));
+            parts.push('b' + Math.round(tc.bgmul * 100));
+            parts.push('c' + (tc.collapsed ? '1' : '0'));
+        }
+        return parts.join('_');
+    }
+
+    function trackHash() {
+        if (window.mp && window.mp.au && window.mp.au.tid) {
+            var sort = (typeof window.getsort === 'function') ? window.getsort() : '';
+            return '#a' + window.mp.au.tid + sort;
+        }
+        return location.hash || '';
+    }
+
+    function fallbackCopy(text, done) {
+        try {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus(); ta.select();
+            var ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            done(!!ok, text);
+        } catch (e) { done(false, text); }
+    }
+
+    function shareLink() {
+        var url = location.origin + location.pathname + '?kv=' + buildShareConfig() + trackHash();
+        var done = function (ok, u) {
+            try {
+                if (!window.toast) return;
+                if (ok) window.toast.ok(4, 'shareable link copied to clipboard');
+                else window.toast.inf(10, 'copy this link:\n' + (u || url));
+            } catch (e) {}
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(
+                function () { done(true, url); },
+                function () { fallbackCopy(url, done); }
+            );
+        } else {
+            fallbackCopy(url, done);
+        }
+    }
+
+    // ----- restore from a shared `?kv=` link on page load -----
+    // copyparty's browser.js strips the query string very early (it calls
+    // hist_replace(evp + location.hash) during init, before this script even
+    // loads), so location.search is usually empty by now. The Navigation
+    // Timing entry's `name` is the URL the document was *fetched* with and is
+    // NOT affected by history.replaceState — read the kv blob from there, with
+    // location.search/href as a fallback.
+    var pendingShare = (function () {
+        var src = location.search || location.href || '';
+        try {
+            var nav = performance.getEntriesByType && performance.getEntriesByType('navigation');
+            if (nav && nav[0] && nav[0].name) src = nav[0].name;
+        } catch (e) {}
+        var m = /[?&]kv=([a-zA-Z0-9_]+)/.exec(src);
+        if (!m) return null;
+        var cfg = {};
+        var toks = m[1].split('_');
+        for (var i = 0; i < toks.length; i++) {
+            var t = toks[i];
+            if (!t) continue;
+            cfg[t.charAt(0)] = t.slice(1);
+        }
+        return cfg;
+    })();
+
+    function applyShare() {
+        if (!pendingShare) return;
+        var cfg = pendingShare;
+        pendingShare = null;     // one-shot
+
+        // (tracker config was already applied early by restoreShareWhenReady)
+        if (cfg.o !== '1') return;
+
+        // honour persisted auto-cycle/interval choices from the link
+        if (cfg.i) {
+            var iv = parseInt(cfg.i, 10);
+            if (iv >= 0 && iv < AUTO_INTERVAL_OPTIONS_S.length) {
+                autoIntervalIdx = iv;
+                AUTO_INTERVAL_MS = AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx] * 1000;
+            }
+        }
+
+        openPanel();   // no-op until a track is live; we only call this once mp.au exists
+
+        // openPanel loads deps + builds the visualizer asynchronously; wait
+        // for `viz` before applying mode/preset so loadPreset has something
+        // to target.
+        var tries = 0;
+        var t = setInterval(function () {
+            if (!isOpen()) { clearInterval(t); return; }
+            if (!viz && ++tries <= 80) return;
+            clearInterval(t);
+            updateIntervalLabel();
+            if (cfg.a) setAutoCycle(cfg.a === '1');
+            if (cfg.m === 'l') setLarge(true);
+            if (cfg.p && presetKeys && presetKeys.length) {
+                var pi = parseInt(cfg.p, 10);
+                if (pi >= 0 && pi < presetKeys.length) {
+                    presetIdx = pi;
+                    applyPreset(0);
+                }
+            }
+        }, 100);
+    }
+
+    // The shared track plays via copyparty's eval_hash (#a<tid>), which runs
+    // after page init — so wait for mp.au to appear, then restore the viz.
+    function restoreShareWhenReady() {
+        if (!pendingShare) return;
+        // tracker config first (independent of playback)
+        if (window.kdTracker && window.kdTracker.applyConfig && (pendingShare.s || pendingShare.b || pendingShare.c)) {
+            var tc = {};
+            if (pendingShare.s) tc.scale = parseInt(pendingShare.s, 10) / 100;
+            if (pendingShare.b) tc.bgmul = parseInt(pendingShare.b, 10) / 100;
+            if (pendingShare.c) tc.collapsed = pendingShare.c === '1';
+            window.kdTracker.applyConfig(tc);
+        }
+        if (pendingShare.o !== '1') { pendingShare = null; return; }
+        var tries = 0;
+        var t = setInterval(function () {
+            if (window.mp && window.mp.au) { clearInterval(t); applyShare(); }
+            else if (++tries > 200) { clearInterval(t); pendingShare = null; }  // ~20s
+        }, 100);
+    }
 
     window.kdVisualizer = {
         toggle: togglePanel,
@@ -964,8 +1138,9 @@
     };
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { tryInstallToggle(0); });
+        document.addEventListener('DOMContentLoaded', function () { tryInstallToggle(0); restoreShareWhenReady(); });
     } else {
         tryInstallToggle(0);
+        restoreShareWhenReady();
     }
 })();

@@ -1175,12 +1175,17 @@ html#ht_spl body {
    stays at the bottom and is NOT moved into the panel (that is fullscreen
    only). The file-browser reservation below keeps grid items clickable. */
 #ht_brw #kd-viz-panel.kd-viz-large.kd-viz-open {
-    /* as tall as possible while still leaving a usable file-browser strip
-       (~200px) above the panel — the file browser is reserved space via
-       --kd-viz-occupy so its rows stay clickable on top of the panel.
-       440px ≈ header+footer+widget+gaps (~232) + ~200 browser. */
-    height: calc(100vh - 440px) !important;
-    min-height: 180px;
+    /* as tall as possible while still leaving a file-browser strip tall
+       enough for TWO grid rows above the panel — the file browser is
+       reserved space via --kd-viz-occupy so its rows stay clickable on top
+       of the panel. ~560px ≈ header+footer+widget+gaps (~232) + ~2 grid
+       rows (~330). On short screens min-height keeps the panel usable.
+       The reserved file-browser strip is viewport-independent: it equals this
+       subtracted constant minus the fixed chrome above (header+breadcrumb)
+       and below (widget+footer) the panel, so ~640 leaves ~260px = two
+       default grid rows + the gap. */
+    height: calc(100vh - 640px) !important;
+    min-height: 200px;
 }
 
 #ht_brw #kd-viz-panel:fullscreen,
@@ -3032,4 +3037,39 @@ html#ht_rup #tw th {
    repainting tiles over the live visualizer canvas. */
 #ht_brw #kd-tracker .kd-tracker-grid {
     contain: layout paint style;
+}
+
+/* ======================================================================
+   NO YELLOW FOCUS HIGHLIGHT on our own controls.
+   copyparty's ui.css applies `*:focus, .btn:focus { box-shadow: ...#fc0
+   inset; outline: #fc0 solid .1em }` to EVERY focusable element. Our viz /
+   tracker buttons are <a href="#">, so after a click the focus lingers and
+   leaves a yellow box + outline stuck on the button. Neutralise it for our
+   controls only (copyparty's own chrome keeps its focus ring for a11y).
+   We still give a subtle neon focus-visible ring for keyboard users so the
+   controls aren't completely unfocusable-looking. Also suppress the mobile
+   tap-flash and stray text-selection on button glyphs/labels.
+   ====================================================================== */
+#kd-viz-toggle,
+#kd-viz-panel #kd-viz-ctrl a,
+#kd-viz-panel #kd-viz-info,
+#kd-tracker .kd-tracker-head a {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+}
+#kd-viz-toggle:focus,
+#kd-viz-panel #kd-viz-ctrl a:focus,
+#kd-viz-panel #kd-viz-info:focus,
+#kd-tracker .kd-tracker-head a:focus {
+    box-shadow: none;
+    outline: none;
+}
+/* keyboard-only: a quiet accent ring instead of the yellow block */
+#kd-viz-toggle:focus-visible,
+#kd-viz-panel #kd-viz-ctrl a:focus-visible,
+#kd-viz-panel #kd-viz-info:focus-visible,
+#kd-tracker .kd-tracker-head a:focus-visible {
+    outline: 1px solid var(--a);
+    outline-offset: 1px;
 }

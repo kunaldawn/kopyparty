@@ -794,6 +794,31 @@
         onAudioChanged: function () { fftSrc = null; },
         relayout: function () { layoutGrid(); },
         rebuild: function () { numChans = 0; prevPat = -1; prevRow = -1; },
+        // --- shareable config (read by kd-visualizer.js share/restore) ---
+        // snapshot the user-tunable tracker state into a compact object.
+        getConfig: function () {
+            return {
+                scale: uiScale,
+                bgmul: bgMul,
+                collapsed: !!(panel && panel.classList.contains('kd-tracker-collapsed'))
+            };
+        },
+        // apply a config object (from a shared URL). Persists to localStorage
+        // via setScale/setBgMul; the collapsed class is also written so it
+        // survives a panel rebuild. Safe to call before the panel exists.
+        applyConfig: function (cfg) {
+            if (!cfg) return;
+            if (typeof cfg.scale === 'number') setScale(cfg.scale);
+            if (typeof cfg.bgmul === 'number') setBgMul(cfg.bgmul);
+            if (typeof cfg.collapsed === 'boolean') {
+                try { localStorage.setItem('kd_tracker_collapsed', cfg.collapsed ? '1' : '0'); } catch (e) {}
+                if (panel) {
+                    panel.classList.toggle('kd-tracker-collapsed', cfg.collapsed);
+                    var tb = panel.querySelector('.kd-tracker-toggle');
+                    if (tb) tb.textContent = cfg.collapsed ? '+' : '−';
+                }
+            }
+        },
         resetPosition: function () {
             try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
             if (!panel) return;
