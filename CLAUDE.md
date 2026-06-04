@@ -78,6 +78,9 @@ GET  /file.md?v            → md.html (standalone)
 GET  /file.md?doc=…        → browser.html with iframe
 GET  /.kpr/w/*             → static assets (renamed from /.cpr/)
 GET  /.kpr/ico/*           → ico server (still active)
+GET  /<path>/?kv=<cfg>#a…  → restores a shared visualizer/tracker setup
+                             (fork-only; read by kd-visualizer.js, ignored
+                             server-side — `v` is reserved, so we use `kv`)
 
 POST/PUT/DELETE/PROPFIND/PROPPATCH/LOCK/UNLOCK/MKCOL/MOVE/COPY  → 405
 
@@ -253,6 +256,40 @@ animating canvas forces a per-frame re-blur and was a major lag source); and (2)
 the tracker renders only ~one node per channel (a few hundred total) and updates
 text on row changes — an earlier full scrolling-pattern view rendered tens of
 thousands of nodes and lagged hard while open. Don't reintroduce either.
+
+**Shareable-setup link (`?kv=`).** The viz control bar has a 🔗 button that
+snapshots the current setup — viz open/closed, mode (windowed/large; fullscreen
+downgrades to large since you can't auto-enter fullscreen without a gesture),
+auto-cycle + interval, preset index, and the tracker's scale/transparency/
+collapsed — into a compact `[a-z0-9_]` blob under the `?kv=` query param, paired
+with the playing track in the `#a<tid>` hash (which is copyparty's own
+play-from-hash mechanism). On load `kd-visualizer.js` restores it. **Gotcha:
+read `?kv=` from `performance.getEntriesByType('navigation')[0].name`, NOT
+`location.search`** — copyparty's `browser.js` calls `hist_replace(evp +
+location.hash)` during init (before this script loads), so the query is already
+gone from `location.search` by the time the IIFE runs; the Navigation Timing
+entry keeps the original fetched URL. `kd-tracker.js` exposes `getConfig()` /
+`applyConfig()` for the tracker half. Sharing a *module* link inherits
+copyparty's autoplay-needs-a-gesture quirk (a bare `#a…` module link shows the
+autoplay-blocked popup too); regular audio autoplays fine.
+
+**Play-from-start (⏮ / Home).** A recording helper: seeks the current track to 0
+and plays, so you can preselect a song, start the screen recorder, then trigger
+a clean start. Just `seek_au_sec(0)` + play.
+
+### Cache headers (Cloudflare)
+
+`permit_caching()` emits `public` on cacheable responses and adds `immutable`
+for content-addressed/long-lived assets. Build-versioned static assets under
+`/.kpr/w/*` are served by **`tx_file` with `oh_k == "oh_g"`** (not `tx_res` —
+they exist on disk, so the routing in `httpcli.py` ~1380 prefers `tx_file`), and
+that branch is gated on `oh_k == "oh_g"` to send `public, max-age=604869,
+immutable` instead of the `no-cache` `cachectl` default. **Don't widen that gate
+to `oh_f`** — user media + thumbnails use `oh_f` and must keep `permit_caching`
+(thumbs still honour their `?cache=i`; user files follow `cachectl`). Thumbnails
+and icons already request `?cache=i`, so they cache hard via that path. The whole
+point is to let the Cloudflare edge + the browser skip conditional-GET round
+trips on a freshly-opened folder.
 
 ### Directory cache (`kd-dircache`)
 
