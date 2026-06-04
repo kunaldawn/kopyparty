@@ -1,68 +1,51 @@
-// kd-tracker.js — live Furnace-style pattern view for chiptunes.
+// kd-tracker.js — compact live channel monitor for chiptunes.
 //
-// While a tracker module (.mod/.it/.s3m/.xm/.mptm/etc.) is playing,
-// this panel shows the actual channel-wise pattern data scrolling in
-// real time. The panel is a child of `#kd-viz-panel` and CSS positions
-// it as an overlay (windowed: above the player chrome; fullscreen:
-// floating top-center). Header is a drag handle — the user can move
-// the box anywhere on the viz canvas; position persists to
-// localStorage.
+// While a tracker module (.mod/.it/.s3m/.xm/.mptm/etc.) is playing, this
+// panel shows a compact grid of per-channel tiles (one tile per channel,
+// 8 across, wrapping so every channel stays visible without horizontal
+// scroll). Each tile shows the channel's currently-sounding note +
+// instrument and a live VU bar. The titlebar doubles as an FFT spectrum
+// display. The panel is a child of `#kd-viz-panel`; its header is a drag
+// handle and its position persists to localStorage.
 //
-// Furnace-fidelity behaviours:
-//
-//   - Cross-pattern continuity. The body holds three patterns at once:
-//     [prev order's pattern | current order's pattern | next order's
-//     pattern]. As the song advances past a pattern boundary, the
-//     visible rows above the play-head are the *previous* pattern's
-//     tail and below are the *next* pattern's head — no blank gap.
-//     Mirrors `pattern.cpp:1246-1331` (`viewPrevPattern` loop).
-//
-//   - Single-row play-head. The currently playing row gets a
-//     white-25 % background tint (`PATTERN_PLAY_HEAD`); the playing
-//     row is centered by setting the body's scrollTop. The bar moves
-//     with the row, but visually it stays put because we always
-//     re-center.
-//
-//   - Padding. The body's vertical padding is computed in JS to
-//     `(bodyH - rowH) / 2` so the play-head can centre even for the
-//     very first / very last row of the tape. CSS `padding: 50%` is
-//     unusable because percentage vertical padding resolves against
-//     the parent's *width*.
+// This replaced an earlier full scrolling-pattern view. That view rendered
+// the entire prev|cur|next patterns (tens of thousands of DOM nodes) inside
+// a backdrop-blurred panel sitting over the animating WebGL visualizer — the
+// per-frame compositor re-blur of that huge area was the dominant source of
+// lag while the tracker was open. The tile grid keeps the node count to a
+// few per channel, updates text only on row changes, and the panel uses a
+// solid translucent background (NO backdrop-filter) — see kd-theme.css.
 //
 // Data is pulled directly from libopenmpt:
-//   _openmpt_module_get_num_orders(modPtr)
-//   _openmpt_module_get_order_pattern(modPtr, ord)
-//   _openmpt_module_get_current_order(modPtr)
-//   _openmpt_module_get_current_row(modPtr)
-//   _openmpt_module_get_pattern_num_rows(modPtr, pat)
-//   _openmpt_module_get_pattern_row_channel_command(modPtr, pat, row,
-//                                                   chan, cmd)
-//     cmd 0=note  1=instrument  2=volume-effect (VolumeCommand type)
-//         3=effect (EffectCommand type)  4=volume value  5=effect param
-//   (libopenmpt's OPENMPT_MODULE_COMMAND_* enum — verified empirically:
-//    a "set volume = v0F" cell reads c2=1, c4=15; an "O04" sample-offset
-//    reads c3=10 (CMD_OFFSET), c5=4. The cmd-3 integer is OpenMPT's
-//    internal EffectCommand enum, mapped to Furnace effect-colour
-//    categories below. Exact glyphs for effect letters and special
-//    notes come from libopenmpt's own formatter.)
+//   _openmpt_module_get_num_channels(modPtr)
+//   _openmpt_module_get_current_order/pattern/row(modPtr)
+//   _openmpt_module_get_pattern_row_channel_command(modPtr, pat, row, ch, cmd)
+//       cmd 0=note  1=instrument (the only two the tile grid reads)
+//   _openmpt_module_get_current_channel_vu_left/right(modPtr, ch)
+//   _openmpt_module_get_current_tempo/speed(modPtr) + get_metadata (status bar)
 
 (function () {
     'use strict';
 
     var panel = null;
-    var headEl = null;
-    var bodyEl = null;
+    var headEl = null;          // titlebar (drag handle + FFT + toggle)
+    var gridEl = null;          // channel-tile grid
+    var fftCanvas = null;
+    var fftCtx = null;
     var rafId = null;
     var prevModPtr = 0;
-    var prevTid = null;           // copyparty track id of the displayed song
-    var activeChans = null;       // channel indices used in song
+    var prevTid = null;         // copyparty track id of the displayed song
+    var numChans = 0;           // channel count of the current module
+    var prevPat = -1;
+    var prevRow = -1;
 
-    // tape state — the [prev|cur|next] strip the body currently renders
-    var tapeOrd = -1;             // current order at last rebuild
-    var tapeCurOffset = 0;        // index of cur-order's row 0 in body children
-    var tapeCurLen = 0;           // row count of cur-order's pattern
-    var prevPlayRow = -1;         // last drawn order-relative play row
-    var prevTapePad = -1;         // last padding applied (px)
+    // per-tile element refs + sustained per-channel note/instrument state
+    var tileNote = null;        // NodeList of .kd-ch-note
+    var tileInst = null;        // NodeList of .kd-ch-inst
+    var vuFills = null;         // NodeList of .kd-vu-fill
+    var vuLevels = null;        // smoothed displayed VU levels
+    var lastNote = null;        // Int16Array: last triggered note per channel (0 none, -1 silenced)
+    var lastInst = null;        // Int16Array: last instrument per channel
 
     var dragState = null;
     var SAVE_KEY = 'kd_tracker_pos';
@@ -75,36 +58,25 @@
     var stNumSmp = 0;
     var stCached = false;
 
-    var vuFills = null;          // NodeList of .kd-vu-fill, one per channel
-    var vuLevels = null;         // smoothed displayed levels (Float32Array)
+    // FFT analyser feeding the titlebar spectrum bars
+    var fftAnalyser = null;
+    var fftBuf = null;          // Uint8Array frequency data
+    var fftSrc = null;          // audio node currently tapped
 
-    var scopeCanvas = null;
-    var scopeCtx = null;
-    var scopeAnalyser = null;     // AnalyserNode on window.kdAudio.context
-    var scopeBuf = null;          // Float32Array time-domain buffer
-    var scopeSrc = null;          // the audio node currently tapped
-
-    // ---- libopenmpt formatters (Furnace-style) -------------------------
+    // ---- libopenmpt helpers --------------------------------------------
     var NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
     function fmtNote(n) {
-        // regular notes only (1..120). openmpt note numbering: 61 = C-5,
-        // so 1 = C-0. Special notes (key-off / cut / fade / PC) are >120
-        // and rendered via libopenmpt's own glyph — see noteText().
+        // regular notes only (1..120); 1 = C-0, 61 = C-5.
         var idx = (n - 1) % 12;
         var oct = Math.floor((n - 1) / 12);
         return NOTE_NAMES[idx] + oct;
     }
-    // 2-digit hex that always renders the value, including 0 → "00". Used
-    // for the volume value and effect parameter: once the field is known
-    // to be present (a volume/effect command exists), a 0 is a real "00",
-    // not an empty cell — libopenmpt prints it that way too.
     function hex2(v) {
         return ('0' + (v & 0xFF).toString(16).toUpperCase()).slice(-2);
     }
 
-    // Read a C string pointer from the emscripten heap. This build does
-    // NOT expose libopenmpt.UTF8ToString on the module object, so probe
-    // the known aliases (resolved lazily once the runtime is up).
+    // Read a C string pointer from the emscripten heap (build doesn't expose
+    // UTF8ToString on the module object, so probe aliases).
     function rdStr(ptr) {
         if (!ptr) return '';
         var L = window.libopenmpt;
@@ -135,26 +107,25 @@
         } catch (e) { return ''; }
     }
 
-    // Pull the exact display glyph libopenmpt would print for one command
-    // of one cell (note off "===", cut "^^^", fade "~~~", PC notes, and
-    // the format-native effect letter such as IT "O" / MOD "9"). Allocates
-    // an openmpt string we must free; only called for the minority of
-    // cells that actually carry a special note or an effect.
-    function fmtCmdStr(mp, pat, row, ch, cmd) {
-        var ptr = libopenmpt._openmpt_module_format_pattern_row_channel_command(mp, pat, row, ch, cmd);
-        if (!ptr) return '';
-        var s = rdStr(ptr);
-        if (libopenmpt._openmpt_free_string) libopenmpt._openmpt_free_string(ptr);
-        return (s || '').replace(/^\s+|\s+$/g, '');
+    function esc(s) {
+        return String(s).replace(/[&<>"]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
     }
 
-    // note text for a cell: empty, a regular note, or libopenmpt's exact
-    // special-note glyph (>120 == key-off/cut/fade/PC*).
-    function noteText(mp, pat, row, ch, n) {
-        if (n <= 0) return '...';
-        if (n <= 120) return fmtNote(n);
-        var s = fmtCmdStr(mp, pat, row, ch, 0);
-        return s || '===';
+    // channel label: libopenmpt channel name when defined, else 1-based number.
+    function channelLabel(mp, ch) {
+        var num = ('0' + (ch + 1)).slice(-2);
+        try {
+            var ptr = libopenmpt._openmpt_module_get_channel_name(mp, ch);
+            if (ptr) {
+                var s = rdStr(ptr);
+                if (libopenmpt._openmpt_free_string) libopenmpt._openmpt_free_string(ptr);
+                s = (s || '').replace(/^\s+|\s+$/g, '');
+                if (s) return num + ' ' + s;
+            }
+        } catch (e) {}
+        return num;
     }
 
     function isChiptunePlaying() {
@@ -177,6 +148,7 @@
         ) & 0xFF;
     }
 
+    // ---- panel ----------------------------------------------------------
     function buildPanel() {
         if (panel) return panel;
         var viz = document.getElementById('kd-viz-panel');
@@ -185,12 +157,11 @@
         panel.id = 'kd-tracker';
         panel.innerHTML =
             '<div class="kd-tracker-head">' +
+                '<canvas class="kd-tracker-fft"></canvas>' +
                 '<span class="kd-tracker-title">tracker</span>' +
                 '<a href="#" class="kd-tracker-toggle" title="minimize / restore">−</a>' +
             '</div>' +
-            '<div class="kd-tracker-cols"></div>' +
-            '<div class="kd-tracker-body"></div>' +
-            '<canvas class="kd-tracker-scope"></canvas>' +
+            '<div class="kd-tracker-grid"></div>' +
             '<div class="kd-tracker-status">' +
                 '<span class="kd-st-bpm">--</span>' +
                 '<span class="kd-st-speed">--</span>' +
@@ -201,29 +172,13 @@
                 '<span class="kd-st-time">--</span>' +
             '</div>';
         viz.appendChild(panel);
-        headEl = panel.querySelector('.kd-tracker-cols');
-        bodyEl = panel.querySelector('.kd-tracker-body');
-        scopeCanvas = panel.querySelector('.kd-tracker-scope');
-        scopeCtx = scopeCanvas ? scopeCanvas.getContext('2d') : null;
+        headEl = panel.querySelector('.kd-tracker-head');
+        gridEl = panel.querySelector('.kd-tracker-grid');
+        fftCanvas = panel.querySelector('.kd-tracker-fft');
+        fftCtx = fftCanvas ? fftCanvas.getContext('2d') : null;
         applySavedPosition();
         applySavedCollapsedState();
         attachDrag(panel.querySelector('.kd-tracker-title'));
-        bodyEl.addEventListener('scroll', function () {
-            headEl.scrollLeft = bodyEl.scrollLeft;
-        });
-        // recompute the centring padding only when the body actually
-        // resizes (drag-resize, fullscreen, window resize) instead of every
-        // animation frame — keeps the tick's hot path free of layout reads.
-        if (window.ResizeObserver) {
-            var ro = new ResizeObserver(function () {
-                prevTapePad = -1;
-                applyBodyPadding();
-                applyTrackerWidth();
-            });
-            ro.observe(bodyEl);
-            var vizEl = document.getElementById('kd-viz-panel');
-            if (vizEl) ro.observe(vizEl);
-        }
         var toggleBtn = panel.querySelector('.kd-tracker-toggle');
         toggleBtn.addEventListener('click', function (e) {
             e.preventDefault();
@@ -248,311 +203,97 @@
     function hidePanel() {
         if (!panel) return;
         panel.classList.remove('kd-tracker-on');
-        tapeOrd = -1;
-        tapeCurOffset = 0;
-        tapeCurLen = 0;
-        prevPlayRow = -1;
+        numChans = 0;
+        prevPat = -1;
+        prevRow = -1;
         prevModPtr = 0;
         prevTid = null;
-        activeChans = null;
         stCached = false;
-        vuFills = null;
-        vuLevels = null;
-        scopeSrc = null;
+        tileNote = tileInst = vuFills = vuLevels = lastNote = lastInst = null;
+        fftSrc = null;
     }
 
-    // Compute channels that ever produce a note in the song. Effort
-    // capped at 64 patterns × 256 rows so a pathological song can't
-    // stall on first frame.
-    function computeActiveChannels(mp) {
-        var nchans = libopenmpt._openmpt_module_get_num_channels(mp);
-        var npats = libopenmpt._openmpt_module_get_num_patterns(mp);
-        var active = [];
-        var seen = new Array(nchans).fill(false);
-        var maxPats = Math.min(npats, 64);
-        for (var p = 0; p < maxPats; p++) {
-            var nrows = libopenmpt._openmpt_module_get_pattern_num_rows(mp, p);
-            var maxRows = Math.min(nrows, 256);
-            for (var r = 0; r < maxRows; r++) {
-                for (var c = 0; c < nchans; c++) {
-                    if (seen[c]) continue;
-                    if (getCmd(mp, p, r, c, 0) > 0) seen[c] = true;
-                }
-            }
-            if (seen.every(Boolean)) break;
-        }
-        for (var i = 0; i < nchans; i++) if (seen[i]) active.push(i);
-        if (active.length === 0) for (var j = 0; j < nchans; j++) active.push(j);
-        return active;
-    }
-
-    // ---- effect-type → Furnace category --------------------------------
-    // The cmd-3 integer is OpenMPT's internal EffectCommand enum (NOT the
-    // format-native letter, and NOT Furnace's effect numbering). We map it
-    // to Furnace's effect-colour buckets (guiConst.cpp: PITCH / VOLUME /
-    // PANNING / SPEED / SONG / TIME / MISC / SYS / INVALID) so each effect
-    // gets the colour Furnace would give the equivalent operation.
-    // Enum values per OpenMPT soundlib/modcommand.h (stable for the common
-    // 1..37 since the ModPlug era; the test build agrees — CMD_OFFSET=10,
-    // CMD_CHANNELVOLUME=21). Unknown → 'sysprim'.
-    var FX_CAT = {
-        1: 'misc',     // ARPEGGIO
-        2: 'pitch',    // PORTAMENTOUP
-        3: 'pitch',    // PORTAMENTODOWN
-        4: 'pitch',    // TONEPORTAMENTO
-        5: 'pitch',    // VIBRATO
-        6: 'volume',   // TONEPORTAVOL  (porta + vol-slide)
-        7: 'volume',   // VIBRATOVOL    (vibrato + vol-slide)
-        8: 'volume',   // TREMOLO
-        9: 'panning',  // PANNING8
-        10: 'misc',    // OFFSET
-        11: 'volume',  // VOLUMESLIDE
-        12: 'song',    // POSITIONJUMP
-        13: 'volume',  // VOLUME
-        14: 'song',    // PATTERNBREAK
-        15: 'misc',    // RETRIG
-        16: 'speed',   // SPEED  (ticks/row)
-        17: 'time',    // TEMPO  (BPM)
-        18: 'volume',  // TREMOR
-        19: 'misc',    // MODCMDEX  (Exy extended)
-        20: 'misc',    // S3MCMDEX  (Sxy extended)
-        21: 'volume',  // CHANNELVOLUME
-        22: 'volume',  // CHANNELVOLSLIDE
-        23: 'volume',  // GLOBALVOLUME
-        24: 'volume',  // GLOBALVOLSLIDE
-        25: 'misc',    // KEYOFF
-        26: 'pitch',   // FINEVIBRATO
-        27: 'panning', // PANBRELLO
-        28: 'pitch',   // XFINEPORTAUPDOWN
-        29: 'panning', // PANNINGSLIDE
-        30: 'misc',    // SETENVPOSITION
-        31: 'misc',    // MIDI
-        32: 'misc',    // SMOOTHMIDI
-        33: 'misc',    // DELAYCUT
-        34: 'misc',    // XPARAM
-        35: 'pitch',   // FINETUNE
-        36: 'pitch',   // FINETUNE_SMOOTH
-        37: 'invalid', // DUMMY
-        38: 'pitch', 39: 'pitch', 40: 'pitch', 41: 'pitch', // NOTESLIDE*
-        42: 'misc', 43: 'misc', 44: 'misc', 45: 'misc',
-        46: 'volume',  // VOLUME8
-        47: 'misc',    // HMN_MEGA_ARP
-        48: 'misc',    // MED_SYNTH_JUMP
-        49: 'volume',  // AUTO_VOLUMESLIDE
-        50: 'pitch', 51: 'pitch', 52: 'pitch', 53: 'pitch', 54: 'pitch', // AUTO_PORTA*
-        55: 'pitch',   // TONEPORTA_DURATION
-        56: 'volume',  // VOLUMEDOWN_DURATION
-        57: 'volume'   // VOLUMEDOWN_ETX
-    };
-    function effectColorClass(typ) {
-        if (typ <= 0) return 'misc';
-        return FX_CAT[typ] || 'sysprim';
-    }
-
-    // Volume colour gradient — Furnace lerps PATTERN_VOLUME_MIN..MAX
-    // (#008000 → #00FF00) by vol/64.
-    function volumeShade(vol) {
-        if (vol <= 0) return null;
-        var t = Math.min(1, Math.max(0, vol / 64));
-        var g = Math.floor(0x80 + (0xFF - 0x80) * t);
-        return 'rgb(0,' + g + ',0)';
-    }
-
-    // Render the rows of one pattern as HTML. Returns {html, rows}.
-    function renderPatternRows(mp, pat, chans, ordOffset) {
-        if (pat < 0) return { html: '', rows: 0 };
-        var nrows = libopenmpt._openmpt_module_get_pattern_num_rows(mp, pat);
-        if (nrows <= 0) return { html: '', rows: 0 };
+    // Build one tile per channel. Columns capped at 8 (CSS grid wraps the
+    // rest), so all channels remain visible without horizontal scroll.
+    function buildGrid(mp) {
+        numChans = libopenmpt._openmpt_module_get_num_channels(mp) || 0;
+        var cols = Math.min(numChans, 8) || 1;
+        panel.style.setProperty('--kd-cols', cols);
         var html = '';
-        for (var r = 0; r < nrows; r++) {
-            var rowIdx = ('0' + r.toString(16)).slice(-2).toUpperCase();
-            // Furnace beat highlights (PATTERN_HI_1 every 4, HI_2 every 16).
-            var beatCls = '';
-            if (r % 16 === 0) beatCls = ' beat-2';
-            else if (r % 4 === 0) beatCls = ' beat-1';
-            // ord-context class so rows belonging to prev/next patterns
-            // can be visually de-emphasised (Furnace dims them slightly).
-            var ctxCls = ordOffset === 0 ? '' : ' ord-other';
-            html += '<div class="row' + beatCls + ctxCls + '" data-ord="' + ordOffset + '" data-row="' + r + '">';
-            html += '<span class="rowidx">' + rowIdx + '</span>';
-            for (var k = 0; k < chans.length; k++) {
-                var ch = chans[k];
-                // correct libopenmpt command indices (see file header):
-                var note   = getCmd(mp, pat, r, ch, 0);   // note
-                var inst   = getCmd(mp, pat, r, ch, 1);   // instrument
-                var volCmd = getCmd(mp, pat, r, ch, 2);   // volume-effect type
-                var fxt    = getCmd(mp, pat, r, ch, 3);   // effect type
-                var volVal = getCmd(mp, pat, r, ch, 4);   // volume value
-                var fxp    = getCmd(mp, pat, r, ch, 5);   // effect param
+        for (var ch = 0; ch < numChans; ch++) {
+            html += '<div class="kd-ch-tile" title="' + esc(channelLabel(mp, ch)) + '">' +
+                '<span class="kd-ch-num">' + ('0' + (ch + 1)).slice(-2) + '</span>' +
+                '<span class="kd-ch-note inactive">···</span>' +
+                '<span class="kd-ch-inst inactive">··</span>' +
+                '<span class="kd-vu"><i class="kd-vu-fill"></i></span>' +
+                '</div>';
+        }
+        gridEl.innerHTML = html;
+        tileNote = gridEl.querySelectorAll('.kd-ch-note');
+        tileInst = gridEl.querySelectorAll('.kd-ch-inst');
+        vuFills = gridEl.querySelectorAll('.kd-vu-fill');
+        vuLevels = new Float32Array(numChans);
+        lastNote = new Int16Array(numChans);   // 0 = never played
+        lastInst = new Int16Array(numChans);
+    }
 
-                var hasVol = (volCmd > 0 || volVal > 0);
-                var hasFx  = (fxt > 0);
-
-                var noteTxt = noteText(mp, pat, r, ch, note);
-                var instTxt = inst > 0 ? hex2(inst) : '..';
-                var volTxt  = hasVol ? hex2(volVal) : '..';
-                // effect: format-native letter (IT "O", MOD "9", …) + param
-                var fxtTxt  = hasFx ? fmtCmdStr(mp, pat, r, ch, 3) : '.';
-                var fxpTxt  = hasFx ? hex2(fxp) : '..';
-
-                var clsN = note <= 0 ? 'inactive' : (note > 120 ? 'note-special' : 'note');
-                var clsI = inst > 0 ? 'inst' : 'inactive';
-                var clsV = hasVol ? 'volume' : 'inactive';
-                var fxColor = effectColorClass(fxt);
-                var clsFt = hasFx ? ('fx fx-' + fxColor) : 'inactive';
-                var clsFp = hasFx ? ('fx fx-' + fxColor) : 'inactive';
-
-                var volStyle = '';
-                if (hasVol) {
-                    var shade = volumeShade(volVal);
-                    if (shade) volStyle = ' style="color:' + shade + '"';
+    // Update each tile's note/instrument from the currently-playing row.
+    // Notes sustain: a tile keeps showing its last triggered note until a
+    // new note or a note-off/cut (>120) silences it. Only called on a row
+    // or pattern change (≤~20×/s), never per frame.
+    function updateGridNotes(mp, pat, row) {
+        if (!tileNote || pat < 0 || row < 0) return;
+        for (var ch = 0; ch < numChans; ch++) {
+            var note = getCmd(mp, pat, row, ch, 0);
+            if (note > 0) {
+                if (note > 120) {                // key-off / cut / fade
+                    lastNote[ch] = -1; lastInst[ch] = 0;
+                } else {
+                    lastNote[ch] = note;
+                    var inst = getCmd(mp, pat, row, ch, 1);
+                    if (inst > 0) lastInst[ch] = inst;
                 }
-
-                html += '<span class="cell">' +
-                    '<i class="' + clsN + '">' + noteTxt + '</i>' +
-                    '<i class="' + clsI + '">' + instTxt + '</i>' +
-                    '<i class="' + clsV + '"' + volStyle + '>' + volTxt + '</i>' +
-                    '<i class="' + clsFt + '">' + fxtTxt + '</i>' +
-                    '<i class="' + clsFp + '">' + fxpTxt + '</i>' +
-                    '</span>';
             }
-            html += '</div>';
-        }
-        return { html: html, rows: nrows };
-    }
-
-    // channel label: libopenmpt channel name when the module defines one
-    // (IT/XM/MPTM often do — Furnace shows these), else the 1-based number.
-    function channelLabel(mp, ch) {
-        var num = ('0' + (ch + 1)).slice(-2);
-        try {
-            var ptr = libopenmpt._openmpt_module_get_channel_name(mp, ch);
-            if (ptr) {
-                var s = rdStr(ptr);
-                if (libopenmpt._openmpt_free_string) libopenmpt._openmpt_free_string(ptr);
-                s = (s || '').replace(/^\s+|\s+$/g, '');
-                if (s) return esc(num + ' ' + s);
+            var nEl = tileNote[ch];
+            if (nEl) {
+                var ln = lastNote[ch];
+                if (ln > 0) {
+                    var t = fmtNote(ln);
+                    if (nEl.textContent !== t) nEl.textContent = t;
+                    if (nEl.className !== 'kd-ch-note') nEl.className = 'kd-ch-note';
+                } else {
+                    if (nEl.textContent !== '···') nEl.textContent = '···';
+                    if (nEl.className !== 'kd-ch-note inactive') nEl.className = 'kd-ch-note inactive';
+                }
             }
-        } catch (e) {}
-        return num;
-    }
-
-    function esc(s) {
-        return String(s).replace(/[&<>"]/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-        });
-    }
-
-    function buildHeader(mp, chans) {
-        var h = '<span class="rowidx">  </span>';
-        for (var ci = 0; ci < chans.length; ci++) {
-            h += '<span class="cell" title="' + esc(channelLabel(mp, chans[ci])) + '">' +
-                 '<span class="kd-ch-name">' + channelLabel(mp, chans[ci]) + '</span>' +
-                 '<span class="kd-vu"><i class="kd-vu-fill"></i></span>' +
-                 '</span>';
+            var iEl = tileInst[ch];
+            if (iEl) {
+                var li = lastInst[ch];
+                var it = li > 0 ? hex2(li) : '··';
+                if (iEl.textContent !== it) iEl.textContent = it;
+                var ic = li > 0 ? 'kd-ch-inst' : 'kd-ch-inst inactive';
+                if (iEl.className !== ic) iEl.className = ic;
+            }
         }
-        headEl.innerHTML = h;
-        vuFills = headEl.querySelectorAll('.kd-vu-fill');
-        vuLevels = new Float32Array(chans.length);
     }
 
-    // Build the [prev | cur | next] tape. Called when order changes.
-    function rebuildTape(mp, ord) {
-        if (!activeChans) activeChans = computeActiveChannels(mp);
-        buildHeader(mp, activeChans);
-
-        var nords = libopenmpt._openmpt_module_get_num_orders(mp);
-        var prevOrdIdx = ord - 1;
-        var nextOrdIdx = ord + 1;
-
-        var prevPat = (prevOrdIdx >= 0)
-            ? libopenmpt._openmpt_module_get_order_pattern(mp, prevOrdIdx) : -1;
-        var curPat = libopenmpt._openmpt_module_get_order_pattern(mp, ord);
-        var nextPat = (nextOrdIdx < nords)
-            ? libopenmpt._openmpt_module_get_order_pattern(mp, nextOrdIdx) : -1;
-
-        var prev = renderPatternRows(mp, prevPat, activeChans, -1);
-        var cur  = renderPatternRows(mp, curPat,  activeChans, 0);
-        var next = renderPatternRows(mp, nextPat, activeChans, 1);
-
-        bodyEl.innerHTML = prev.html + cur.html + next.html;
-        tapeOrd = ord;
-        tapeCurOffset = prev.rows;
-        tapeCurLen = cur.rows;
-        prevPlayRow = -1;
-
-        panel.style.setProperty('--kd-tracker-chans', activeChans.length);
-        applyBodyPadding();
-        applyTrackerWidth();
-    }
-
-    // Pad the body with half its visible height (minus half a row) on
-    // top and bottom so the very first / very last tape row can be
-    // centred under the play-head. Recompute lazily — only on rebuild
-    // and when the body's clientHeight changes.
-    function applyBodyPadding() {
-        if (!bodyEl) return;
-        var bodyH = bodyEl.clientHeight;
-        var sample = bodyEl.children[tapeCurOffset] || bodyEl.children[0];
-        var rowH = (sample && sample.offsetHeight) || 14;
-        var pad = Math.max(0, Math.floor((bodyH - rowH) / 2));
-        if (pad === prevTapePad) return;
-        bodyEl.style.paddingTop = pad + 'px';
-        bodyEl.style.paddingBottom = pad + 'px';
-        prevTapePad = pad;
-    }
-
-    // Size the tracker to its channel count: content width when it fits,
-    // capped at the available panel width (with a horizontal scrollbar)
-    // when there are too many channels. Adds .kd-tracker-fits when no
-    // horizontal scroll is needed so CSS can hide the scrollbar.
-    function applyTrackerWidth() {
-        if (!panel || !bodyEl || !activeChans) return;
-        var viz = document.getElementById('kd-viz-panel');
-        if (!viz) return;
-        // measure a rendered row's natural width (rowidx + all cells).
-        // bail if the panel isn't laid out yet (hidden / no rows) so we
-        // never collapse the tracker to a few px of chrome.
-        var firstRow = bodyEl.querySelector('.row');
-        var content = firstRow ? firstRow.scrollWidth : 0;
-        if (content <= 0) return;
-        // panel chrome: the body sits flush; add the tracker's own L/R border.
-        var cs = window.getComputedStyle(panel);
-        var chrome = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
-        var desired = content + chrome + 2; // +2 safety
-        // available width inside the viz panel, leaving the same 12px side
-        // inset the CSS uses, on both sides.
-        var avail = viz.clientWidth - 24;
-        var w = Math.min(desired, avail);
-        if (w > 0) panel.style.width = Math.floor(w) + 'px';
-        var fits = desired <= avail + 1;
-        panel.classList.toggle('kd-tracker-fits', fits);
-    }
-
-    // Mark the playing row, scroll it to the body's vertical centre.
-    // The bg tint on `.row.current` *is* the play-head — Furnace draws
-    // it the same way (RowBg0 with PATTERN_PLAY_HEAD = white 25 %).
-    function highlightRow(orderRelativeIdx) {
-        if (!bodyEl) return;
-        if (prevPlayRow >= 0) {
-            var prevEl = bodyEl.children[tapeCurOffset + prevPlayRow];
-            if (prevEl) prevEl.classList.remove('current');
+    // Per-channel VU bars (eased, attack-fast/release-slow). One FFI pair
+    // per channel per tick — cheap.
+    function updateVU(mp) {
+        if (!vuFills || !vuLevels) return;
+        for (var ch = 0; ch < numChans && ch < vuFills.length; ch++) {
+            var l = libopenmpt._openmpt_module_get_current_channel_vu_left(mp, ch) || 0;
+            var r = libopenmpt._openmpt_module_get_current_channel_vu_right(mp, ch) || 0;
+            var target = Math.max(l, r);
+            if (target > 1) target = 1; else if (target < 0) target = 0;
+            var cur = vuLevels[ch];
+            cur = target > cur ? target : cur + (target - cur) * 0.35;
+            vuLevels[ch] = cur;
+            vuFills[ch].style.width = (cur * 100).toFixed(1) + '%';
         }
-        var newTapeIdx = tapeCurOffset + orderRelativeIdx;
-        var cur = bodyEl.children[newTapeIdx];
-        if (cur) {
-            cur.classList.add('current');
-            var rowH = cur.offsetHeight || 14;
-            var bodyH = bodyEl.clientHeight;
-            // offsetTop is relative to the scrolling container (bodyEl).
-            // To place the row at the visual centre we want
-            //   rowTop - scrollTop === (bodyH - rowH) / 2
-            // -> scrollTop = rowTop - (bodyH - rowH) / 2
-            bodyEl.scrollTop = cur.offsetTop - (bodyH - rowH) / 2;
-        }
-        prevPlayRow = orderRelativeIdx;
     }
 
+    // ---- status bar -----------------------------------------------------
     function fmtMS(s) {
         if (!isFinite(s) || s < 0) s = 0;
         var m = Math.floor(s / 60), ss = Math.floor(s % 60);
@@ -585,51 +326,29 @@
             ? libopenmpt._openmpt_module_get_current_playing_channels(mp) : 0;
         var pos = libopenmpt._openmpt_module_get_position_seconds
             ? libopenmpt._openmpt_module_get_position_seconds(mp) : 0;
-        var hx = function (v) { return ('0' + (v & 0xFF).toString(16).toUpperCase()).slice(-2); };
         setSt('kd-st-bpm', 'BPM ' + bpm);
         setSt('kd-st-speed', 'SPD ' + spd);
-        setSt('kd-st-pos', 'Ord ' + curOrd + '/' + (nords - 1) + ' · Pat ' + curPat + ' · Row ' + hx(curRow) + '/' + hx(nrows));
+        setSt('kd-st-pos', 'Ord ' + curOrd + '/' + (nords - 1) + ' · Pat ' + curPat + ' · Row ' + hex2(curRow) + '/' + hex2(nrows));
         setSt('kd-st-chans', 'Ch ' + playing + '/' + stNumChans);
         setSt('kd-st-counts', 'Ins ' + stNumIns + ' · Smp ' + stNumSmp);
         setSt('kd-st-fmt', stFmt);
         setSt('kd-st-time', fmtMS(pos) + ' / ' + fmtMS(stDur));
     }
 
-    // Per-channel VU bars (horizontal fill under each channel name). Uses
-    // libopenmpt's per-channel VU; eased toward the target so it doesn't
-    // strobe. Cheap: one FFI pair per active channel per tick.
-    function updateVU(mp) {
-        if (!vuFills || !vuLevels || !activeChans) return;
-        for (var k = 0; k < activeChans.length && k < vuFills.length; k++) {
-            var ch = activeChans[k];
-            var l = libopenmpt._openmpt_module_get_current_channel_vu_left(mp, ch) || 0;
-            var r = libopenmpt._openmpt_module_get_current_channel_vu_right(mp, ch) || 0;
-            var target = Math.max(l, r);
-            if (target > 1) target = 1; else if (target < 0) target = 0;
-            // attack fast, release slow
-            var cur = vuLevels[k];
-            cur = target > cur ? target : cur + (target - cur) * 0.35;
-            vuLevels[k] = cur;
-            vuFills[k].style.width = (cur * 100).toFixed(1) + '%';
-        }
-    }
-
-    // Lazily create one AnalyserNode on the shared context and tap whatever
-    // source the visualizer is feeding (chiptune ScriptProcessor or the
-    // MediaElementSource). Re-taps when the source changes. The analyser is
-    // a passive sink, so it does not disturb the existing audio graph.
-    function ensureScopeAnalyser() {
+    // ---- titlebar FFT spectrum bars -------------------------------------
+    // One AnalyserNode on the shared context, tapping the same source the
+    // visualizer feeds. Passive sink — does not alter the audio graph.
+    function ensureFftAnalyser() {
         var ctx = window.kdAudio && window.kdAudio.context;
         if (!ctx) return false;
-        if (!scopeAnalyser) {
+        if (!fftAnalyser) {
             try {
-                scopeAnalyser = ctx.createAnalyser();
-                scopeAnalyser.fftSize = 1024;
-                scopeAnalyser.smoothingTimeConstant = 0;
-                scopeBuf = new Float32Array(scopeAnalyser.fftSize);
-            } catch (e) { scopeAnalyser = null; return false; }
+                fftAnalyser = ctx.createAnalyser();
+                fftAnalyser.fftSize = 256;
+                fftAnalyser.smoothingTimeConstant = 0.6;
+                fftBuf = new Uint8Array(fftAnalyser.frequencyBinCount);
+            } catch (e) { fftAnalyser = null; return false; }
         }
-        // resolve the current source the same way kd-visualizer does
         var src = null;
         if (window.kdChiptune && window.kdChiptune.ChiptuneAudio
             && window.mp && window.mp.au instanceof window.kdChiptune.ChiptuneAudio) {
@@ -638,52 +357,45 @@
         } else if (window.mp && window.mp.au) {
             src = window.mp.au._kdSource;
         }
-        if (src && src !== scopeSrc) {
-            try { src.connect(scopeAnalyser); scopeSrc = src; }
-            catch (e) { /* already connected or incompatible */ scopeSrc = src; }
+        if (src && src !== fftSrc) {
+            try { src.connect(fftAnalyser); fftSrc = src; }
+            catch (e) { fftSrc = src; }
         }
-        return !!scopeAnalyser;
+        return !!fftAnalyser;
     }
 
-    function sizeScopeCanvas() {
-        if (!scopeCanvas) return;
-        var r = scopeCanvas.getBoundingClientRect();
+    function drawFft() {
+        if (!fftCtx || !ensureFftAnalyser()) return;
+        var c = fftCanvas;
+        var r = c.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
         var dpr = Math.min(window.devicePixelRatio || 1, 2);
         var W = Math.max(2, Math.floor(r.width * dpr));
         var H = Math.max(2, Math.floor(r.height * dpr));
-        if (scopeCanvas.width !== W || scopeCanvas.height !== H) {
-            scopeCanvas.width = W; scopeCanvas.height = H;
-        }
-    }
-
-    function drawScope() {
-        if (!scopeCtx || !ensureScopeAnalyser()) return;
-        sizeScopeCanvas();
-        var W = scopeCanvas.width, H = scopeCanvas.height;
-        if (W < 2 || H < 2) return;
-        scopeAnalyser.getFloatTimeDomainData(scopeBuf);
-        var ctx = scopeCtx;
+        if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+        fftAnalyser.getByteFrequencyData(fftBuf);
+        var ctx = fftCtx;
         ctx.clearRect(0, 0, W, H);
-        ctx.lineWidth = Math.max(1, H / 24);
-        ctx.strokeStyle = '#00ff99';
-        ctx.shadowColor = 'rgba(0,255,150,0.5)';
-        ctx.shadowBlur = ctx.lineWidth * 1.5;
-        ctx.beginPath();
-        var n = scopeBuf.length, mid = H / 2;
-        for (var i = 0; i < n; i++) {
-            var x = (i / (n - 1)) * W;
-            var y = mid - scopeBuf[i] * (mid - ctx.lineWidth);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        var bars = 40;
+        var useBins = Math.floor(fftBuf.length * 0.7); // drop near-empty highs
+        var gap = Math.max(1, W / bars * 0.18);
+        var bw = (W - gap * (bars - 1)) / bars;
+        for (var b = 0; b < bars; b++) {
+            var lo = Math.floor(b / bars * useBins);
+            var hi = Math.max(lo + 1, Math.floor((b + 1) / bars * useBins));
+            var m = 0;
+            for (var i = lo; i < hi; i++) if (fftBuf[i] > m) m = fftBuf[i];
+            var v = m / 255;
+            var bh = v * H;
+            var x = b * (bw + gap);
+            ctx.fillStyle = 'rgba(0,255,150,' + (0.18 + 0.5 * v) + ')';
+            ctx.fillRect(x, H - bh, bw, bh);
         }
-        ctx.stroke();
-        ctx.shadowBlur = 0;
     }
 
-    // Rows advance at most ~20×/s even on fast modules, so polling at 60fps
-    // is pure waste (and keeps the main thread busy alongside the chiptune
-    // audio callback + visualizer). Cap the work to ~30fps. Body-padding is
-    // no longer recomputed here every frame — a ResizeObserver handles size
-    // changes (see buildPanel) — removing a per-frame layout read.
+    // ---- main loop ------------------------------------------------------
+    // Tile text changes at most ~20×/s; VU + FFT animate but are cheap.
+    // Cap to ~30fps so we don't starve the audio callback + visualizer.
     var TICK_FPS = 30;
     var TICK_MIN_INTERVAL = 1000 / TICK_FPS;
     var lastTickTs = 0;
@@ -707,36 +419,34 @@
         var curRow = libopenmpt._openmpt_module_get_current_row(mp);
 
         // Detect a track change. The module pointer alone is unreliable —
-        // libopenmpt frees and recreates modules on every track, and the
-        // allocator recycles the same address (observed: only 3 distinct
-        // pointers across a dozen switches), so a new song can reuse the
-        // previous pointer and slip past an mp-only check, leaving stale
-        // active-channels / tape. copyparty's per-track id (mp.au.tid) is
-        // the authoritative signal, so reset on either changing.
+        // libopenmpt recycles addresses — so also key on copyparty's per-
+        // track id (mp.au.tid).
         var curTid = (window.mp && window.mp.au && window.mp.au.tid != null)
             ? window.mp.au.tid : null;
         if (mp !== prevModPtr || curTid !== prevTid) {
             prevModPtr = mp;
             prevTid = curTid;
-            tapeOrd = -1;
-            activeChans = null;
+            numChans = 0;
             stCached = false;
+            prevPat = -1;
+            prevRow = -1;
         }
 
-        if (curOrd !== tapeOrd) {
-            // make the panel visible BEFORE rebuilding so applyTrackerWidth
-            // (called at the end of rebuildTape) can measure laid-out rows.
+        if (!numChans) {
             panel.classList.add('kd-tracker-on');
-            rebuildTape(mp, curOrd);
+            buildGrid(mp);
         }
 
-        if (curRow !== prevPlayRow && curRow >= 0 && curRow < tapeCurLen) {
-            highlightRow(curRow);
+        var curPat = libopenmpt._openmpt_module_get_current_pattern(mp);
+        if (curPat !== prevPat || curRow !== prevRow) {
+            updateGridNotes(mp, curPat, curRow);
+            prevPat = curPat;
+            prevRow = curRow;
         }
 
         updateStatus(mp, curOrd, curRow);
         updateVU(mp);
-        drawScope();
+        drawFft();
     }
 
     function start() {
@@ -824,11 +534,9 @@
 
     window.kdTracker = {
         // Re-clamp the (possibly dragged) tracker box back inside the viz
-        // panel. The dragged left/top are px relative to #kd-viz-panel and
-        // persisted to localStorage; when the panel shrinks (e.g. exiting
-        // fullscreen) a far-corner position lands outside the smaller panel
-        // and the tracker vanishes. This pins it back into view WITHOUT
-        // rewriting the saved position, and is a no-op when already inside.
+        // panel after the panel shrinks (e.g. exiting fullscreen). Adjusts
+        // only the live inline position, never the saved one, and is a no-op
+        // when already inside.
         clampPosition: function () {
             if (!panel || !panel.classList.contains('kd-tracker-on')) return;
             var viz = document.getElementById('kd-viz-panel');
@@ -841,8 +549,6 @@
             var maxTop = Math.max(0, vr.height - r.height);
             var nl = Math.max(0, Math.min(curLeft, maxLeft));
             var nt = Math.max(0, Math.min(curTop, maxTop));
-            // only convert to inline positioning when actually out of bounds,
-            // so an un-dragged tracker keeps its responsive CSS placement.
             if (Math.abs(nl - curLeft) > 0.5 || Math.abs(nt - curTop) > 0.5) {
                 panel.style.left = nl + 'px';
                 panel.style.top = nt + 'px';
@@ -851,8 +557,8 @@
                 panel.style.transform = 'none';
             }
         },
-        onAudioChanged: function () { scopeSrc = null; },
-        rebuild: function () { tapeOrd = -1; activeChans = null; prevTapePad = -1; },
+        onAudioChanged: function () { fftSrc = null; },
+        rebuild: function () { numChans = 0; prevPat = -1; prevRow = -1; },
         resetPosition: function () {
             try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
             if (!panel) return;
