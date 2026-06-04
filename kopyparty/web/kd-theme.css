@@ -1566,6 +1566,16 @@ html#ht_spl body {
     pointer-events: none;
     opacity: 0.85;
 }
+/* scene-change sweep — a light band slid across the whole grid by JS on a
+   song-structural effect (position jump / pattern break). Parked off-screen. */
+#ht_brw #kd-tracker .kd-tracker-sweep {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    transform: translateX(-110%);
+    background: linear-gradient(100deg, transparent 38%, rgba(0, 255, 150, 0.20) 50%, transparent 62%);
+}
 #ht_brw #kd-tracker .kd-tracker-head .kd-tracker-title,
 #ht_brw #kd-tracker .kd-tracker-head .kd-tracker-zoom,
 #ht_brw #kd-tracker .kd-tracker-head .kd-tracker-toggle {

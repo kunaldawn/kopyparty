@@ -50,6 +50,15 @@
     var lastNote = null;        // Int16Array: last triggered note per channel (0 none, -1 silenced)
     var lastInst = null;        // Int16Array: last instrument per channel
 
+    // effect display lingering: an effect shows at full opacity for a hold,
+    // then fades out, so the user actually sees it (effects are 1-row events).
+    var fxLevel = null;         // Float32Array: per-channel effect opacity 1->0
+    var fxHold = null;          // Int8Array: ticks left at full before fading
+    var sweepEl = null;         // panel-wide "scene change" sweep overlay
+    var lastSweepTs = 0;        // throttle for the scene-change sweep
+    var FX_HOLD_TICKS = 10;     // ~0.33s held full at 30fps
+    var FX_FADE = 0.92;         // per-tick decay after the hold (~0.8s tail)
+
     var dragState = null;
     var SAVE_KEY = 'kd_tracker_pos';
 
@@ -215,12 +224,14 @@
                 '<span class="kd-st-counts">--</span>' +
                 '<span class="kd-st-fmt">--</span>' +
                 '<span class="kd-st-time">--</span>' +
-            '</div>';
+            '</div>' +
+            '<div class="kd-tracker-sweep"></div>';
         viz.appendChild(panel);
         headEl = panel.querySelector('.kd-tracker-head');
         gridEl = panel.querySelector('.kd-tracker-grid');
         fftCanvas = panel.querySelector('.kd-tracker-fft');
         fftCtx = fftCanvas ? fftCanvas.getContext('2d') : null;
+        sweepEl = panel.querySelector('.kd-tracker-sweep');
         panel.style.setProperty('--kd-tracker-scale', uiScale);
         applySavedPosition();
         applySavedCollapsedState();
@@ -297,6 +308,7 @@
         prevTid = null;
         stCached = false;
         tiles = tileNote = tileInst = tileFx = vuFills = vuLevels = hitLevel = lastNote = lastInst = null;
+        fxLevel = fxHold = null;
         fftSrc = null;
     }
 
@@ -323,6 +335,8 @@
         vuFills = gridEl.querySelectorAll('.kd-vu-fill');
         vuLevels = new Float32Array(numChans);
         hitLevel = new Float32Array(numChans);
+        fxLevel = new Float32Array(numChans);
+        fxHold = new Int8Array(numChans);
         lastNote = new Int16Array(numChans);   // 0 = never played
         lastInst = new Int16Array(numChans);
         layoutGrid();   // pick the real column count for the current width/scale
@@ -369,33 +383,85 @@
                 var ic = li > 0 ? 'kd-ch-inst' : 'kd-ch-inst inactive';
                 if (iEl.className !== ic) iEl.className = ic;
             }
-            // effect column — shown per-row like Furnace (the effect glyph +
-            // param, coloured by Furnace category). Cleared on rows with no
-            // effect; transient by nature. We surface the main effect column,
-            // and fall back to the volume-column effect when there's no main
-            // one so vol-column commands (e.g. IT pan/vol slides) still show.
+            // effect column — Furnace-style glyph+param, coloured by category.
+            // When an effect fires we show it at full opacity, then it HOLDS
+            // and FADES (in the per-tick loop) so the user can actually read a
+            // 1-row event, and a category-specific entrance animation plays.
+            // Main effect column wins; falls back to the volume column.
             var fEl = tileFx[ch];
             if (fEl) {
                 var fxt = getCmd(mp, pat, row, ch, 3);   // effect type
-                var ft, fc;
+                var ft = null, cat = null;
                 if (fxt > 0) {
-                    var glyph = fmtCmdStr(mp, pat, row, ch, 3) || '?';
-                    ft = glyph + hex2(getCmd(mp, pat, row, ch, 5));
-                    fc = 'kd-ch-fx fx-' + effectColorClass(fxt);
+                    ft = (fmtCmdStr(mp, pat, row, ch, 3) || '?') + hex2(getCmd(mp, pat, row, ch, 5));
+                    cat = effectColorClass(fxt);
                 } else {
                     var volCmd = getCmd(mp, pat, row, ch, 2);   // volume-column effect
                     if (volCmd > 0) {
-                        var vg = fmtCmdStr(mp, pat, row, ch, 2) || '?';
-                        ft = vg + hex2(getCmd(mp, pat, row, ch, 4));
-                        fc = 'kd-ch-fx fx-volume';
-                    } else {
-                        ft = '···'; fc = 'kd-ch-fx inactive';
+                        ft = (fmtCmdStr(mp, pat, row, ch, 2) || '?') + hex2(getCmd(mp, pat, row, ch, 4));
+                        cat = 'volume';
                     }
                 }
-                if (fEl.textContent !== ft) fEl.textContent = ft;
-                if (fEl.className !== fc) fEl.className = fc;
+                if (ft !== null) {
+                    fEl.textContent = ft;
+                    fEl.className = 'kd-ch-fx fx-' + cat;
+                    fEl.style.opacity = '1';
+                    if (fxLevel) { fxLevel[ch] = 1; fxHold[ch] = FX_HOLD_TICKS; }
+                    animateEffect(fEl, cat);
+                    if (cat === 'song') triggerSceneChange();
+                }
+                // no effect this row → leave the previous one to hold+fade.
             }
         }
+    }
+
+    // Category-specific entrance animation, evoking what the effect does.
+    // transform/opacity only (GPU-composited) so it stays cheap over the
+    // animating visualizer. Web Animations API: one-shot, auto-reverts.
+    function animateEffect(fEl, cat) {
+        if (!fEl || !fEl.animate) return;
+        try { if (fEl._kdAnim) fEl._kdAnim.cancel(); } catch (e) {}
+        var kf, opt = { duration: 360, easing: 'cubic-bezier(.2,.8,.2,1)' };
+        switch (cat) {
+            case 'pitch':                       // note bend — vertical
+                kf = [{ transform: 'translateY(4px)' }, { transform: 'translateY(-2px)' }, { transform: 'translateY(0)' }];
+                opt.duration = 420; break;
+            case 'volume':                      // swell — scale pulse
+                kf = [{ transform: 'scale(.65)', opacity: .5 }, { transform: 'scale(1.2)' }, { transform: 'scale(1)', opacity: 1 }];
+                break;
+            case 'panning':                     // pan — horizontal sweep
+                kf = [{ transform: 'translateX(-7px)' }, { transform: 'translateX(3px)' }, { transform: 'translateX(0)' }];
+                break;
+            case 'speed':                       // speed — horizontal stretch snap
+                kf = [{ transform: 'scaleX(1.6)' }, { transform: 'scaleX(.9)' }, { transform: 'scaleX(1)' }];
+                opt.duration = 300; break;
+            case 'time':                        // tempo — zoom-in pulse
+                kf = [{ transform: 'scale(1.35)', opacity: .25 }, { transform: 'scale(1)', opacity: 1 }];
+                break;
+            case 'song':                        // jump/break — big pop (+sweep)
+                kf = [{ transform: 'scale(1.6)', opacity: .2 }, { transform: 'scale(1)', opacity: 1 }];
+                opt.duration = 300; break;
+            default:                            // misc/sys — quick pop
+                kf = [{ transform: 'scale(1.4)' }, { transform: 'scale(1)' }];
+                opt.duration = 260; break;
+        }
+        try { fEl._kdAnim = fEl.animate(kf, opt); } catch (e) {}
+    }
+
+    // A song-structural effect (position jump / pattern break) sweeps a light
+    // band across the whole grid — a "scene change" cue. Throttled so dense
+    // sequences don't strobe.
+    function triggerSceneChange() {
+        if (!sweepEl || !sweepEl.animate) return;
+        var now = performance.now ? performance.now() : Date.now();
+        if (now - lastSweepTs < 380) return;
+        lastSweepTs = now;
+        try {
+            sweepEl.animate(
+                [{ transform: 'translateX(-110%)' }, { transform: 'translateX(110%)' }],
+                { duration: 520, easing: 'ease-in-out' }
+            );
+        } catch (e) {}
     }
 
     // Per-channel VU bars (eased, attack-fast/release-slow). One FFI pair
@@ -421,6 +487,24 @@
                 var st = tiles[ch].style;
                 st.setProperty('--hit', h.toFixed(3));
                 st.setProperty('--lvl', cur.toFixed(3));
+            }
+            // effect hold-then-fade. During the hold we leave opacity alone so
+            // the entrance animation owns it; after, we fade the text out and
+            // finally reset to the idle "···".
+            if (fxLevel && fxLevel[ch] > 0) {
+                if (fxHold[ch] > 0) {
+                    fxHold[ch]--;
+                } else {
+                    var fl = fxLevel[ch] * FX_FADE;
+                    var fe = tileFx && tileFx[ch];
+                    if (fl < 0.04) {
+                        fl = 0;
+                        if (fe) { fe.textContent = '···'; fe.className = 'kd-ch-fx inactive'; fe.style.opacity = ''; }
+                    } else if (fe) {
+                        fe.style.opacity = fl.toFixed(3);
+                    }
+                    fxLevel[ch] = fl;
+                }
             }
         }
     }
