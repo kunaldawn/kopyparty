@@ -1657,8 +1657,10 @@ html#ht_spl body {
        grid; --kd-cols (≤8) is set by JS. 1fr/minmax(0,…) collapse to 0 in a
        shrink-wrapped container, so a fixed em column is required here. */
     grid-template-columns: repeat(var(--kd-cols, 4), 5.6em);
-    gap: calc(2px * var(--kd-tracker-scale));
-    padding: calc(4px * var(--kd-tracker-scale));
+    gap: calc(3px * var(--kd-tracker-scale));
+    /* extra padding gives the per-tile outer glow room to render inside the
+       paint-contained grid box instead of being hard-clipped at the edge. */
+    padding: calc(7px * var(--kd-tracker-scale));
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
@@ -1687,11 +1689,17 @@ html#ht_spl body {
     padding: calc(3px * var(--kd-tracker-scale)) calc(5px * var(--kd-tracker-scale)) calc(2px * var(--kd-tracker-scale));
     min-width: 0;
     background: rgba(0, 0, 0, calc(0.16 * var(--kd-tracker-bgmul, 1)));
-    border: 1px solid rgba(0, 255, 150, calc(0.10 + 0.70 * var(--hit)));
+    border: 1px solid rgba(0, 255, 150, calc(0.16 + 0.82 * var(--hit)));
     border-radius: 5px;
+    /* Outer glow on note-on. Blur + spread scale with --kd-tracker-scale so a
+       zoomed-up tile gets a proportionally bigger halo (a fixed-px glow looked
+       tiny once the tiles were enlarged). Two outer layers — a bright tight
+       core + a wide soft halo — plus an inner bloom make the pulse read
+       clearly at both normal and large zoom. */
     box-shadow:
-        0 0 calc(9px * var(--hit)) rgba(0, 255, 150, calc(0.6 * var(--hit))),
-        inset 0 0 calc(12px * var(--hit)) rgba(0, 255, 150, calc(0.16 * var(--hit)));
+        0 0 calc(7px * var(--hit) * var(--kd-tracker-scale, 1)) rgba(0, 255, 170, calc(0.95 * var(--hit))),
+        0 0 calc(22px * var(--hit) * var(--kd-tracker-scale, 1)) calc(3px * var(--hit) * var(--kd-tracker-scale, 1)) rgba(0, 255, 150, calc(0.85 * var(--hit))),
+        inset 0 0 calc(14px * var(--hit)) rgba(0, 255, 150, calc(0.24 * var(--hit)));
     transition: border-color 0.07s linear, box-shadow 0.07s linear;
     font-family: var(--font-mono);
     font-size: 0.7em;
