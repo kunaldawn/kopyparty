@@ -1024,7 +1024,16 @@ class HttpCli(object):
             return
 
         n = 69 if not cache else 604869 if cache == "i" else int(cache)
-        self.out_headers["Cache-Control"] = "max-age=" + str(n)
+        # `public` lets Cloudflare / shared caches store the response (there
+        # are no auth cookies on this read-only fork); `immutable` tells
+        # browsers never to revalidate content-addressed assets (thumbnails
+        # are requested with cache=i and a per-build cache-buster), which
+        # kills the conditional-GET round-trips that make a freshly-opened
+        # folder feel sluggish over a slow link.
+        cc = "public, max-age=" + str(n)
+        if cache == "i" or n >= 604800:
+            cc += ", immutable"
+        self.out_headers["Cache-Control"] = cc
 
     def k304(self) -> bool:
         k304 = self.cookies.get("k304")
@@ -2004,9 +2013,16 @@ class HttpCli(object):
         # send reply
 
         if is_compressed:
-            self.out_headers["Cache-Control"] = "max-age=604869"
-        else:
+            self.out_headers["Cache-Control"] = "public, max-age=604869, immutable"
+        elif "cache" in self.uparam:
             self.permit_caching()
+        else:
+            # packaged web assets (/.kpr/w/*) are build-versioned via the
+            # `?_=<ts>` cache-buster the templates append, so they're safe to
+            # treat as immutable. Default `cachectl` is "no-cache", which made
+            # every CSS/JS/font revalidate on each page load — bad for both the
+            # browser and the Cloudflare edge. Cache them hard instead.
+            self.out_headers["Cache-Control"] = "public, max-age=604869, immutable"
 
         if "txt" in self.uparam:
             mime = "text/plain; charset={}".format(self.uparam["txt"] or "utf-8")
@@ -2241,7 +2257,15 @@ class HttpCli(object):
         # send reply
 
         if is_compressed:
-            self.out_headers["Cache-Control"] = "max-age=604869"
+            self.out_headers["Cache-Control"] = "public, max-age=604869, immutable"
+        elif oh_k == "oh_g" and "cache" not in self.uparam:
+            # embedded /.kpr/w/* static assets that happen to exist on disk
+            # are routed through tx_file (not tx_res). They're build-versioned
+            # via the `?_=<ts>` cache-buster, so cache them immutably for the
+            # browser + Cloudflare instead of the "no-cache" cachectl default.
+            # `oh_f` (user files + thumbnails) keeps permit_caching, so thumbs
+            # still honour their `cache=i` and user media follows cachectl.
+            self.out_headers["Cache-Control"] = "public, max-age=604869, immutable"
         else:
             self.permit_caching()
 

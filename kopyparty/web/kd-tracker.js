@@ -306,6 +306,35 @@
         panel.style.setProperty('--kd-cols', cols);
     }
 
+    // Re-clamp the (possibly dragged) tracker box back inside the viz panel
+    // after its size changes (channel-count growth on a track change, or the
+    // panel shrinking when leaving fullscreen). Adjusts only the live inline
+    // position, never the saved one, and is a no-op when already inside.
+    var CLAMP_MARGIN = 12;   // gap kept from the viz panel border when re-adjusting
+    function clampPosition() {
+        if (!panel || !panel.classList.contains('kd-tracker-on')) return;
+        var viz = document.getElementById('kd-viz-panel');
+        if (!viz) return;
+        var vr = viz.getBoundingClientRect();
+        var r = panel.getBoundingClientRect();
+        var curLeft = r.left - vr.left;
+        var curTop = r.top - vr.top;
+        var m = CLAMP_MARGIN;
+        // keep a margin on all sides; if the box is too big to fit with the
+        // margin, pin it to the top-left margin rather than going negative.
+        var maxLeft = Math.max(m, vr.width - r.width - m);
+        var maxTop = Math.max(m, vr.height - r.height - m);
+        var nl = Math.min(Math.max(curLeft, m), maxLeft);
+        var nt = Math.min(Math.max(curTop, m), maxTop);
+        if (Math.abs(nl - curLeft) > 0.5 || Math.abs(nt - curTop) > 0.5) {
+            panel.style.left = nl + 'px';
+            panel.style.top = nt + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+            panel.style.transform = 'none';
+        }
+    }
+
     function applySavedCollapsedState() {
         try {
             if (localStorage.getItem('kd_tracker_collapsed') === '1') {
@@ -669,6 +698,11 @@
         if (!numChans) {
             panel.classList.add('kd-tracker-on');
             buildGrid(mp);
+            // A track change (e.g. autoplay advancing to the next song) can add
+            // channels → more grid rows → a taller panel. If the box had been
+            // dragged near an edge, the grown panel can spill outside the viz
+            // viewport. Pull it back in now that the new size is laid out.
+            clampPosition();
         }
 
         var curPat = libopenmpt._openmpt_module_get_current_pattern(mp);
@@ -771,29 +805,35 @@
         // panel after the panel shrinks (e.g. exiting fullscreen). Adjusts
         // only the live inline position, never the saved one, and is a no-op
         // when already inside.
-        clampPosition: function () {
-            if (!panel || !panel.classList.contains('kd-tracker-on')) return;
-            var viz = document.getElementById('kd-viz-panel');
-            if (!viz) return;
-            var vr = viz.getBoundingClientRect();
-            var r = panel.getBoundingClientRect();
-            var curLeft = r.left - vr.left;
-            var curTop = r.top - vr.top;
-            var maxLeft = Math.max(0, vr.width - r.width);
-            var maxTop = Math.max(0, vr.height - r.height);
-            var nl = Math.max(0, Math.min(curLeft, maxLeft));
-            var nt = Math.max(0, Math.min(curTop, maxTop));
-            if (Math.abs(nl - curLeft) > 0.5 || Math.abs(nt - curTop) > 0.5) {
-                panel.style.left = nl + 'px';
-                panel.style.top = nt + 'px';
-                panel.style.right = 'auto';
-                panel.style.bottom = 'auto';
-                panel.style.transform = 'none';
-            }
-        },
+        clampPosition: clampPosition,
         onAudioChanged: function () { fftSrc = null; },
         relayout: function () { layoutGrid(); },
         rebuild: function () { numChans = 0; prevPat = -1; prevRow = -1; },
+        // --- shareable config (read by kd-visualizer.js share/restore) ---
+        // snapshot the user-tunable tracker state into a compact object.
+        getConfig: function () {
+            return {
+                scale: uiScale,
+                bgmul: bgMul,
+                collapsed: !!(panel && panel.classList.contains('kd-tracker-collapsed'))
+            };
+        },
+        // apply a config object (from a shared URL). Persists to localStorage
+        // via setScale/setBgMul; the collapsed class is also written so it
+        // survives a panel rebuild. Safe to call before the panel exists.
+        applyConfig: function (cfg) {
+            if (!cfg) return;
+            if (typeof cfg.scale === 'number') setScale(cfg.scale);
+            if (typeof cfg.bgmul === 'number') setBgMul(cfg.bgmul);
+            if (typeof cfg.collapsed === 'boolean') {
+                try { localStorage.setItem('kd_tracker_collapsed', cfg.collapsed ? '1' : '0'); } catch (e) {}
+                if (panel) {
+                    panel.classList.toggle('kd-tracker-collapsed', cfg.collapsed);
+                    var tb = panel.querySelector('.kd-tracker-toggle');
+                    if (tb) tb.textContent = cfg.collapsed ? '+' : '−';
+                }
+            }
+        },
         resetPosition: function () {
             try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
             if (!panel) return;

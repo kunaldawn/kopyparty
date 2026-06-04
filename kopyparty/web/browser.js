@@ -3284,6 +3284,11 @@ function play(tid, is_ev, seek) {
 	else {
 		mp.au = new Audio();
 		mp.au2 = new Audio();
+		// audio beats thumbnails: grid thumbs load with fetchpriority=low, so
+		// hint the browser to prioritise the actual song request. Without this
+		// a freshly-clicked track waits behind a burst of thumbnail fetches on
+		// HTTP/1.1 (6-conn limit) and is deprioritised under HTTP/2.
+		try { mp.au.fetchPriority = mp.au2.fetchPriority = 'high'; } catch (ex) { }
 		mp.set_ev();
 		widget.open();
 	}
@@ -5883,7 +5888,7 @@ var thegrid = (function () {
 
 			html.push('<a href="' + ohref + '" ref="' + ref +
 				'"' + ac + ' ttt="' + esc(name) + '"><img style="height:' +
-				(r.sz / 1.25) + 'em" loading="lazy" onload="th_onload(this)" src="' +
+				(r.sz / 1.25) + 'em" loading="lazy" fetchpriority="low" decoding="async" onload="th_onload(this)" src="' +
 				ihref + '" /><span' + ac + '>' + ao.innerHTML + '</span></a>');
 		}
 		ggrid.innerHTML = html.join('\n');

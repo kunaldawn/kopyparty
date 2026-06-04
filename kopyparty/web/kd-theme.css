@@ -1175,12 +1175,17 @@ html#ht_spl body {
    stays at the bottom and is NOT moved into the panel (that is fullscreen
    only). The file-browser reservation below keeps grid items clickable. */
 #ht_brw #kd-viz-panel.kd-viz-large.kd-viz-open {
-    /* as tall as possible while still leaving a usable file-browser strip
-       (~200px) above the panel — the file browser is reserved space via
-       --kd-viz-occupy so its rows stay clickable on top of the panel.
-       440px ≈ header+footer+widget+gaps (~232) + ~200 browser. */
-    height: calc(100vh - 440px) !important;
-    min-height: 180px;
+    /* as tall as possible while still leaving a file-browser strip tall
+       enough for TWO grid rows above the panel — the file browser is
+       reserved space via --kd-viz-occupy so its rows stay clickable on top
+       of the panel. ~560px ≈ header+footer+widget+gaps (~232) + ~2 grid
+       rows (~330). On short screens min-height keeps the panel usable.
+       The reserved file-browser strip is viewport-independent: it equals this
+       subtracted constant minus the fixed chrome above (header+breadcrumb)
+       and below (widget+footer) the panel, so ~640 leaves ~260px = two
+       default grid rows + the gap. */
+    height: calc(100vh - 640px) !important;
+    min-height: 200px;
 }
 
 #ht_brw #kd-viz-panel:fullscreen,
@@ -1652,8 +1657,10 @@ html#ht_spl body {
        grid; --kd-cols (≤8) is set by JS. 1fr/minmax(0,…) collapse to 0 in a
        shrink-wrapped container, so a fixed em column is required here. */
     grid-template-columns: repeat(var(--kd-cols, 4), 5.6em);
-    gap: calc(2px * var(--kd-tracker-scale));
-    padding: calc(4px * var(--kd-tracker-scale));
+    gap: calc(3px * var(--kd-tracker-scale));
+    /* extra padding gives the per-tile outer glow room to render inside the
+       paint-contained grid box instead of being hard-clipped at the edge. */
+    padding: calc(7px * var(--kd-tracker-scale));
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
@@ -1682,11 +1689,17 @@ html#ht_spl body {
     padding: calc(3px * var(--kd-tracker-scale)) calc(5px * var(--kd-tracker-scale)) calc(2px * var(--kd-tracker-scale));
     min-width: 0;
     background: rgba(0, 0, 0, calc(0.16 * var(--kd-tracker-bgmul, 1)));
-    border: 1px solid rgba(0, 255, 150, calc(0.10 + 0.70 * var(--hit)));
+    border: 1px solid rgba(0, 255, 150, calc(0.16 + 0.82 * var(--hit)));
     border-radius: 5px;
+    /* Outer glow on note-on. Blur + spread scale with --kd-tracker-scale so a
+       zoomed-up tile gets a proportionally bigger halo (a fixed-px glow looked
+       tiny once the tiles were enlarged). Two outer layers — a bright tight
+       core + a wide soft halo — plus an inner bloom make the pulse read
+       clearly at both normal and large zoom. */
     box-shadow:
-        0 0 calc(9px * var(--hit)) rgba(0, 255, 150, calc(0.6 * var(--hit))),
-        inset 0 0 calc(12px * var(--hit)) rgba(0, 255, 150, calc(0.16 * var(--hit)));
+        0 0 calc(7px * var(--hit) * var(--kd-tracker-scale, 1)) rgba(0, 255, 170, calc(0.95 * var(--hit))),
+        0 0 calc(22px * var(--hit) * var(--kd-tracker-scale, 1)) calc(3px * var(--hit) * var(--kd-tracker-scale, 1)) rgba(0, 255, 150, calc(0.85 * var(--hit))),
+        inset 0 0 calc(14px * var(--hit)) rgba(0, 255, 150, calc(0.24 * var(--hit)));
     transition: border-color 0.07s linear, box-shadow 0.07s linear;
     font-family: var(--font-mono);
     font-size: 0.7em;
@@ -3032,4 +3045,39 @@ html#ht_rup #tw th {
    repainting tiles over the live visualizer canvas. */
 #ht_brw #kd-tracker .kd-tracker-grid {
     contain: layout paint style;
+}
+
+/* ======================================================================
+   NO YELLOW FOCUS HIGHLIGHT on our own controls.
+   copyparty's ui.css applies `*:focus, .btn:focus { box-shadow: ...#fc0
+   inset; outline: #fc0 solid .1em }` to EVERY focusable element. Our viz /
+   tracker buttons are <a href="#">, so after a click the focus lingers and
+   leaves a yellow box + outline stuck on the button. Neutralise it for our
+   controls only (copyparty's own chrome keeps its focus ring for a11y).
+   We still give a subtle neon focus-visible ring for keyboard users so the
+   controls aren't completely unfocusable-looking. Also suppress the mobile
+   tap-flash and stray text-selection on button glyphs/labels.
+   ====================================================================== */
+#kd-viz-toggle,
+#kd-viz-panel #kd-viz-ctrl a,
+#kd-viz-panel #kd-viz-info,
+#kd-tracker .kd-tracker-head a {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+}
+#kd-viz-toggle:focus,
+#kd-viz-panel #kd-viz-ctrl a:focus,
+#kd-viz-panel #kd-viz-info:focus,
+#kd-tracker .kd-tracker-head a:focus {
+    box-shadow: none;
+    outline: none;
+}
+/* keyboard-only: a quiet accent ring instead of the yellow block */
+#kd-viz-toggle:focus-visible,
+#kd-viz-panel #kd-viz-ctrl a:focus-visible,
+#kd-viz-panel #kd-viz-info:focus-visible,
+#kd-tracker .kd-tracker-head a:focus-visible {
+    outline: 1px solid var(--a);
+    outline-offset: 1px;
 }
