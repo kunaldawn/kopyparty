@@ -69,6 +69,11 @@
     var layoutT = 0;
     try { var _s = parseFloat(localStorage.getItem(SCALE_KEY)); if (_s >= 0.5 && _s <= 3) uiScale = _s; } catch (e) {}
 
+    // background transparency multiplier (1 = default; lower = more see-through)
+    var BGMUL_KEY = 'kd_tracker_bgmul';
+    var bgMul = 1;
+    try { var _b = parseFloat(localStorage.getItem(BGMUL_KEY)); if (_b >= 0.1 && _b <= 3) bgMul = _b; } catch (e) {}
+
     // per-track cached status fields (recomputed on track change)
     var stFmt = '';
     var stDur = 0;
@@ -210,9 +215,11 @@
         panel.innerHTML =
             '<div class="kd-tracker-head">' +
                 '<canvas class="kd-tracker-fft"></canvas>' +
-                '<span class="kd-tracker-title">tracker</span>' +
+                '<span class="kd-tracker-title">KD/TRACKER</span>' +
                 '<a href="#" class="kd-tracker-zoom" data-z="out" title="smaller (font / UI scale)">A−</a>' +
                 '<a href="#" class="kd-tracker-zoom" data-z="in" title="larger (font / UI scale)">A+</a>' +
+                '<a href="#" class="kd-tracker-zoom" data-t="out" title="more transparent">◐−</a>' +
+                '<a href="#" class="kd-tracker-zoom" data-t="in" title="more opaque">◐+</a>' +
                 '<a href="#" class="kd-tracker-toggle" title="minimize / restore">−</a>' +
             '</div>' +
             '<div class="kd-tracker-grid"></div>' +
@@ -233,6 +240,7 @@
         fftCtx = fftCanvas ? fftCanvas.getContext('2d') : null;
         sweepEl = panel.querySelector('.kd-tracker-sweep');
         panel.style.setProperty('--kd-tracker-scale', uiScale);
+        panel.style.setProperty('--kd-tracker-bgmul', bgMul);
         applySavedPosition();
         applySavedCollapsedState();
         attachDrag(panel.querySelector('.kd-tracker-title'));
@@ -249,7 +257,10 @@
             zbtns[zi].addEventListener('click', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
-                setScale(this.getAttribute('data-z') === 'in' ? uiScale * 1.15 : uiScale / 1.15);
+                if (this.hasAttribute('data-z'))
+                    setScale(this.getAttribute('data-z') === 'in' ? uiScale * 1.15 : uiScale / 1.15);
+                else if (this.hasAttribute('data-t'))
+                    setBgMul(this.getAttribute('data-t') === 'in' ? bgMul * 1.3 : bgMul / 1.3);
             });
         }
         // recompute column count when the available width changes. Entering /
@@ -263,6 +274,13 @@
             }, 150);
         });
         return panel;
+    }
+
+    // Background transparency — clamp, persist, apply. Lower = more see-through.
+    function setBgMul(m) {
+        bgMul = Math.max(0.1, Math.min(3, m));
+        if (panel) panel.style.setProperty('--kd-tracker-bgmul', bgMul.toFixed(3));
+        try { localStorage.setItem(BGMUL_KEY, bgMul.toFixed(3)); } catch (e) {}
     }
 
     // User zoom — clamp, persist, apply, relayout columns, keep in view.

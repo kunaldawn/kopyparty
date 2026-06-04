@@ -1504,11 +1504,12 @@ html#ht_spl body {
     box-sizing: border-box;
 }
 
-/* minimised state — only the title bar is visible. The user clicks
-   the toggle button (or the title) to restore. */
+/* minimised state — only the title bar is visible. height:auto so the panel
+   hugs the (scale-aware) titlebar; a fixed px height clipped the bar at large
+   font scales. */
 #ht_brw #kd-tracker.kd-tracker-collapsed {
-    height: 18px !important;
-    min-height: 18px;
+    height: auto !important;
+    min-height: 0 !important;
 }
 #ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-grid,
 #ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-status {
@@ -1680,7 +1681,7 @@ html#ht_spl body {
     gap: 0 calc(4px * var(--kd-tracker-scale));
     padding: calc(3px * var(--kd-tracker-scale)) calc(5px * var(--kd-tracker-scale)) calc(2px * var(--kd-tracker-scale));
     min-width: 0;
-    background: rgba(0, 0, 0, 0.16);
+    background: rgba(0, 0, 0, calc(0.16 * var(--kd-tracker-bgmul, 1)));
     border: 1px solid rgba(0, 255, 150, calc(0.10 + 0.70 * var(--hit)));
     border-radius: 5px;
     box-shadow:
@@ -1776,7 +1777,7 @@ html#ht_spl body {
     align-items: center;
     padding: calc(3px * var(--kd-tracker-scale)) calc(8px * var(--kd-tracker-scale));
     border-top: 1px solid rgba(0, 255, 150, 0.18);
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(0, 0, 0, calc(0.18 * var(--kd-tracker-bgmul, 1)));
     font-family: var(--font-mono);
     font-size: 0.62em;
     letter-spacing: 0.04em;
@@ -2976,11 +2977,13 @@ html#ht_rup #tw th {
    the per-tile / status backgrounds + text-shadows keep text and the neon
    highlights (hit glow, VU, FFT) readable on top. */
 #ht_brw #kd-viz-panel #kd-tracker {
-    background: linear-gradient(180deg, rgba(12, 15, 22, 0.40), rgba(8, 10, 16, 0.46));
+    background: linear-gradient(180deg,
+        rgba(12, 15, 22, calc(0.40 * var(--kd-tracker-bgmul, 1))),
+        rgba(8, 10, 16, calc(0.46 * var(--kd-tracker-bgmul, 1))));
 }
 #ht_brw #kd-viz-panel:fullscreen #kd-tracker,
 #ht_brw #kd-viz-panel:-webkit-full-screen #kd-tracker {
-    background: rgba(6, 8, 13, 0.34);
+    background: rgba(6, 8, 13, calc(0.34 * var(--kd-tracker-bgmul, 1)));
 }
 
 /* ======================================================================

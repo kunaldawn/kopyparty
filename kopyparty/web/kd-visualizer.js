@@ -634,20 +634,55 @@
         } catch (e) {}
     }
 
+    // ----- keep copyparty popups usable in fullscreen.
+    // copyparty's modal (autoplay-next confirm at a folder boundary) and toasts
+    // are appended to <body>; in fullscreen only the fullscreen element renders,
+    // so they're invisible and the session looks "broken". While fullscreen is
+    // on the viz panel we move #modal / #toast into the panel, and back on exit.
+    var fsPopupObserver = null;
+    function movePopups(into) {
+        var ids = ['modal', 'toast'];
+        for (var i = 0; i < ids.length; i++) {
+            var el = document.getElementById(ids[i]);
+            if (el && el.parentNode !== into) {
+                try { into.appendChild(el); } catch (e) {}
+            }
+        }
+    }
+    function startFsPopupWatch() {
+        if (!panel) return;
+        movePopups(panel);
+        if (fsPopupObserver || !window.MutationObserver) return;
+        fsPopupObserver = new MutationObserver(function () {
+            if (document.fullscreenElement === panel) movePopups(panel);
+        });
+        fsPopupObserver.observe(document.body, { childList: true });
+    }
+    function stopFsPopupWatch() {
+        if (fsPopupObserver) { fsPopupObserver.disconnect(); fsPopupObserver = null; }
+        movePopups(document.body);
+    }
+
     function onFullscreenChange() {
         var fs = document.fullscreenElement || document.webkitFullscreenElement;
-        if (fs && panel && fs === panel) moveWidgetIntoPanel();
-        else restoreWidget();
+        var inFs = !!(fs && panel && fs === panel);
+        if (inFs) { moveWidgetIntoPanel(); startFsPopupWatch(); }
+        else { restoreWidget(); stopFsPopupWatch(); }
         updateOccupy();
-        // panel size just changed; pull the tracker back into view once the
-        // layout settles.
-        setTimeout(function () {
+        // panel size just changed; relayout + pull the tracker back into view +
+        // re-publish the file-browser reservation. Do it at 60ms AND ~450ms
+        // because the viz panel height TRANSITIONS back from fullscreen over
+        // ~300ms — an early offsetHeight read would leave the file browser
+        // reserving the wrong amount (the "doesn't snap back" bug).
+        var settle = function () {
             if (window.kdTracker && window.kdTracker.relayout)
                 window.kdTracker.relayout();
             if (window.kdTracker && window.kdTracker.clampPosition)
                 window.kdTracker.clampPosition();
             updateOccupy();
-        }, 60);
+        };
+        setTimeout(settle, 60);
+        setTimeout(settle, 460);
     }
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
