@@ -23,6 +23,7 @@
     var SVG_RAND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M3 7l4 0 8 10 6 0 M3 17l4 0 4-5 M19 7l2 0 M19 17l2 0 M21 5l0 4 M21 15l0 4"/></svg>';
     var SVG_AUTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M21 12a9 9 0 1 1-3.5-7.1 M21 4v5h-5"/></svg>';
     var SVG_FS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5"/></svg>';
+    var SVG_LARGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><path d="M8 3H5a2 2 0 0 0-2 2v3 M16 3h3a2 2 0 0 1 2 2v3 M8 21H5a2 2 0 0 1-2-2v-3 M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
     var SVG_CLOSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block;pointer-events:none"><polygon points="6,9 18,9 12,17"/></svg>';
     var SVG_VOL = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:1em;height:1em;display:block"><polygon points="3,10 3,14 7,14 12,18 12,6 7,10"/><path d="M15.5 12 a3 3 0 0 0 -1.5 -2.6 v5.2 a3 3 0 0 0 1.5 -2.6 z M17.5 12 a5 5 0 0 0 -3.5 -4.8 v1.6 a3.5 3.5 0 0 1 0 6.4 v1.6 a5 5 0 0 0 3.5 -4.8 z"/></svg>';
 
@@ -33,6 +34,7 @@
     var canvas = null;
     var panel = null;
     var nameEl = null;
+    var nameInnerEl = null;
     var rafId = null;
     var presets = null;
     var presetKeys = null;
@@ -151,6 +153,12 @@
     var weeklyCache = Object.create(null);
     var weeklyInflight = Object.create(null);
 
+    // preset-dropdown paging (infinite scroll)
+    var searchMatched = [];     // current filtered key list
+    var searchRendered = 0;     // how many rows appended so far
+    var searchObserver = null;  // IntersectionObserver for the sentinel
+    var SEARCH_PAGE = 60;       // rows appended per page
+
     function fetchWeeklyPreset(name) {
         if (!window.kdViz_weekly) return Promise.reject(new Error('no weekly manifest'));
         var fname = window.kdViz_weekly[name];
@@ -174,7 +182,7 @@
             // top-left: currently playing track filename
             '<div id="kd-viz-track"><span id="kd-viz-track-name">—</span></div>' +
             // top-right: preset name (clickable → opens search dropdown)
-            '<a href="#" id="kd-viz-info" title="click to search presets"><span id="kd-viz-name">…</span></a>' +
+            '<a href="#" id="kd-viz-info" title="click to search presets"><span id="kd-viz-name"><span class="kd-viz-name-inner">…</span></span></a>' +
             // searchable preset dropdown (anchored top-right under the
             // info pill, hidden until the pill is clicked)
             '<div id="kd-viz-search" role="dialog" aria-label="preset search">' +
@@ -194,6 +202,7 @@
                 '<a href="#" id="kd-viz-auto" title="auto-cycle on/off (A)">' + SVG_AUTO + '</a>' +
                 '<a href="#" id="kd-viz-interval" title="cycle interval (click to change)"><span>' + fmtIntervalLabel(AUTO_INTERVAL_OPTIONS_S[autoIntervalIdx]) + '</span></a>' +
                 '<a href="#" id="kd-viz-next" title="next preset (right arrow)">' + SVG_NEXT + '</a>' +
+                '<a href="#" id="kd-viz-large" title="larger view (L)">' + SVG_LARGE + '</a>' +
                 '<a href="#" id="kd-viz-fs" title="fullscreen (F)">' + SVG_FS + '</a>' +
                 '<a href="#" id="kd-viz-close" title="close (Escape)">' + SVG_CLOSE + '</a>' +
             '</div>';
@@ -214,6 +223,7 @@
 
         canvas = document.getElementById('kd-viz-canvas');
         nameEl = document.getElementById('kd-viz-name');
+        nameInnerEl = panel.querySelector('.kd-viz-name-inner');
 
         var on = function (id, fn) {
             var el = document.getElementById(id);
@@ -224,6 +234,7 @@
         on('kd-viz-rand', function () { randomPreset(); });
         on('kd-viz-auto', function () { setAutoCycle(!autoCycle); });
         on('kd-viz-interval', cycleInterval);
+        on('kd-viz-large', toggleLarge);
         on('kd-viz-fs', toggleFullscreen);
         on('kd-viz-close', closePanel);
 
@@ -333,9 +344,30 @@
         var blend = typeof blendSec === 'number' ? blendSec : 1.5;
 
         var setName = function () {
-            if (!nameEl) return;
+            // re-acquire/rebuild the inner span if it ever got detached
+            // (defensive — keeps the marquee structure intact).
+            if (nameEl && (!nameInnerEl || !nameEl.contains(nameInnerEl))) {
+                nameEl.textContent = '';
+                nameInnerEl = document.createElement('span');
+                nameInnerEl.className = 'kd-viz-name-inner';
+                nameEl.appendChild(nameInnerEl);
+            }
+            var target = nameInnerEl || nameEl;
+            if (!target) return;
             var pretty = key.replace(/^[^-]+ - /, '');
-            nameEl.textContent = pretty.length > 70 ? pretty.slice(0, 67) + '…' : pretty;
+            target.textContent = pretty;
+            // toggle marquee when the text overflows the fixed-width pill.
+            // measure after the text is in the DOM.
+            if (nameInnerEl && nameEl) {
+                nameEl.classList.remove('marquee');
+                var overflow = nameInnerEl.scrollWidth - nameEl.clientWidth;
+                if (overflow > 2) {
+                    // distance + duration scale with overflow (~60px/s)
+                    nameEl.style.setProperty('--kd-marquee-dx', (-overflow - 8) + 'px');
+                    nameEl.style.setProperty('--kd-marquee-dur', Math.max(4, (overflow + 8) / 60 * 2) + 's');
+                    nameEl.classList.add('marquee');
+                }
+            }
         };
 
         var preset = presets[key];
@@ -347,8 +379,12 @@
 
         // null sentinel → weekly preset, fetch lazily and cache. Show a
         // brief "loading" hint in the name pill so it's clear that a
-        // network round-trip is happening.
-        if (nameEl) nameEl.textContent = '⏳ loading…';
+        // network round-trip is happening. Write to the inner span (never
+        // nameEl directly) so the marquee structure survives.
+        if (nameInnerEl || nameEl) {
+            if (nameEl) nameEl.classList.remove('marquee');
+            (nameInnerEl || nameEl).textContent = '⏳ loading…';
+        }
         fetchWeeklyPreset(key).then(function (json) {
             // user may have skipped to a different preset while the
             // fetch was in flight — only apply if still selected.
@@ -448,43 +484,65 @@
 
     // ----- preset search dropdown -----
 
+    function makeSearchRow(key) {
+        var li = document.createElement('li');
+        // strip the "AuthorName - " prefix in the visible text but keep it
+        // queryable via the original key (stored in title).
+        li.textContent = key.replace(/^[^-]+ - /, '');
+        li.title = key;
+        var globalIdx = presetKeys.indexOf(key);
+        li.dataset.idx = globalIdx;
+        if (globalIdx === presetIdx) li.className = 'current';
+        li.addEventListener('click', function () {
+            var idx = parseInt(this.dataset.idx, 10);
+            if (isNaN(idx) || idx < 0) return;
+            presetIdx = idx;
+            applyPreset();
+            scheduleAutoCycle(true);
+            closeSearch();
+        });
+        return li;
+    }
+
+    function appendSearchPage() {
+        var list = document.getElementById('kd-viz-search-list');
+        if (!list) return;
+        var sentinel = list.querySelector('.kd-viz-more-sentinel');
+        var frag = document.createDocumentFragment();
+        var end = Math.min(searchMatched.length, searchRendered + SEARCH_PAGE);
+        for (var i = searchRendered; i < end; i++) frag.appendChild(makeSearchRow(searchMatched[i]));
+        searchRendered = end;
+        if (sentinel) list.insertBefore(frag, sentinel);
+        else list.appendChild(frag);
+        // when fully rendered, drop the sentinel + observer
+        if (searchRendered >= searchMatched.length) {
+            if (searchObserver) { searchObserver.disconnect(); searchObserver = null; }
+            if (sentinel) sentinel.remove();
+        }
+    }
+
     function buildSearchList(filter) {
         var list = document.getElementById('kd-viz-search-list');
         if (!list || !presetKeys) return;
         list.innerHTML = '';
+        if (searchObserver) { searchObserver.disconnect(); searchObserver = null; }
         var f = (filter || '').toLowerCase().trim();
-        var matched = f
+        searchMatched = f
             ? presetKeys.filter(function (k) { return k.toLowerCase().indexOf(f) >= 0; })
             : presetKeys;
-        // cap displayed rows so a long list doesn't tank the panel
-        var max = 200;
-        var fragment = document.createDocumentFragment();
-        for (var i = 0; i < Math.min(matched.length, max); i++) {
-            var key = matched[i];
-            var li = document.createElement('li');
-            // strip the "AuthorName - " prefix in the visible text but
-            // keep it queryable via the original key for search.
-            li.textContent = key.replace(/^[^-]+ - /, '');
-            li.title = key;
-            var globalIdx = presetKeys.indexOf(key);
-            li.dataset.idx = globalIdx;
-            if (globalIdx === presetIdx) li.className = 'current';
-            li.addEventListener('click', function () {
-                var idx = parseInt(this.dataset.idx, 10);
-                if (isNaN(idx) || idx < 0) return;
-                presetIdx = idx;
-                applyPreset();
-                scheduleAutoCycle(true);
-                closeSearch();
-            });
-            fragment.appendChild(li);
-        }
-        list.appendChild(fragment);
-        if (matched.length > max) {
-            var more = document.createElement('li');
-            more.className = 'more';
-            more.textContent = '… ' + (matched.length - max) + ' more — refine search';
-            list.appendChild(more);
+        searchRendered = 0;
+        // sentinel row observed to trigger the next page
+        var sentinel = document.createElement('li');
+        sentinel.className = 'kd-viz-more-sentinel';
+        list.appendChild(sentinel);
+        appendSearchPage();
+        if (searchRendered < searchMatched.length && window.IntersectionObserver) {
+            searchObserver = new IntersectionObserver(function (entries) {
+                for (var i = 0; i < entries.length; i++) {
+                    if (entries[i].isIntersecting) { appendSearchPage(); break; }
+                }
+            }, { root: list, rootMargin: '120px' });
+            searchObserver.observe(sentinel);
         }
     }
 
@@ -505,6 +563,7 @@
     function closeSearch() {
         var s = document.getElementById('kd-viz-search');
         if (s) s.classList.remove('open');
+        if (searchObserver) { searchObserver.disconnect(); searchObserver = null; }
     }
 
     function toggleSearch() {
@@ -579,6 +638,14 @@
         var fs = document.fullscreenElement || document.webkitFullscreenElement;
         if (fs && panel && fs === panel) moveWidgetIntoPanel();
         else restoreWidget();
+        updateOccupy();
+        // panel size just changed; pull the tracker back into view once the
+        // layout settles.
+        setTimeout(function () {
+            if (window.kdTracker && window.kdTracker.clampPosition)
+                window.kdTracker.clampPosition();
+            updateOccupy();
+        }, 60);
     }
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
@@ -673,6 +740,8 @@
                 }, 100);
             }
             panel.classList.add('kd-viz-open');
+            updateLargeButtonState();
+            updateOccupy();
             // wait for the height transition to complete before sizing
             // the GL canvas to its final dimensions.
             setTimeout(function () { resizeCanvas(); }, 380);
@@ -692,6 +761,9 @@
             try { document.exitFullscreen(); } catch (e) {}
         }
         if (panel) panel.classList.remove('kd-viz-open');
+        if (panel) panel.classList.remove('kd-viz-large');
+        updateLargeButtonState();
+        updateOccupy();
         closeSearch();
         updateToggleState();
         // stop the cycle while the panel is hidden — no point spinning
@@ -701,6 +773,42 @@
 
     function togglePanel() {
         if (isOpen()) closePanel(); else openPanel();
+    }
+
+    function isLarge() {
+        return !!(panel && panel.classList.contains('kd-viz-large'));
+    }
+
+    // Publish how much vertical space the panel occupies so the file
+    // browser can reserve room above it (keeps grid items clickable).
+    // 0 in windowed mode -> layout unchanged.
+    function updateOccupy() {
+        var px = (isLarge() && isOpen() && !document.fullscreenElement)
+            ? (panel.offsetHeight + 'px') : '0px';
+        try { document.documentElement.style.setProperty('--kd-viz-occupy', px); } catch (e) {}
+    }
+
+    function setLarge(on) {
+        if (!panel) return;
+        panel.classList.toggle('kd-viz-large', !!on);
+        updateLargeButtonState();
+        // wait for the height transition, then resize the GL canvas, publish
+        // the new occupy height, and re-clamp the tracker into the panel.
+        setTimeout(function () {
+            resizeCanvas();
+            updateOccupy();
+            if (window.kdTracker && window.kdTracker.clampPosition)
+                window.kdTracker.clampPosition();
+        }, 340);
+    }
+
+    function toggleLarge() { setLarge(!isLarge()); }
+
+    function updateLargeButtonState() {
+        var btn = document.getElementById('kd-viz-large');
+        if (!btn) return;
+        if (isLarge()) btn.classList.add('on');
+        else btn.classList.remove('on');
     }
 
     function toggleFullscreen() {
@@ -757,18 +865,28 @@
     window.addEventListener('resize', function () {
         if (!isOpen()) return;
         clearTimeout(resizeT);
-        resizeT = setTimeout(resizeCanvas, 120);
+        resizeT = setTimeout(function () {
+            resizeCanvas();
+            if (window.kdTracker && window.kdTracker.clampPosition)
+                window.kdTracker.clampPosition();
+        }, 120);
     });
 
     // keyboard nav — only when panel is open
     document.addEventListener('keydown', function (e) {
         if (!isOpen()) return;
         if (e.target && /^(input|textarea|select)$/i.test(e.target.tagName)) return;
-        if (e.key === 'Escape') closePanel();
+        if (e.key === 'Escape') {
+            // step down one level: fullscreen -> large -> windowed -> closed
+            if (document.fullscreenElement) { try { document.exitFullscreen(); } catch (e2) {} }
+            else if (isLarge()) setLarge(false);
+            else closePanel();
+        }
         else if (e.key === 'ArrowLeft') stepPreset(-1);
         else if (e.key === 'ArrowRight') stepPreset(1);
         else if (e.key === 'r' || e.key === 'R') randomPreset();
         else if (e.key === 'a' || e.key === 'A') setAutoCycle(!autoCycle);
+        else if (e.key === 'l' || e.key === 'L') toggleLarge();
         else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
     });
 

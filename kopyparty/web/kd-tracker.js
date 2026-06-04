@@ -67,6 +67,23 @@
     var dragState = null;
     var SAVE_KEY = 'kd_tracker_pos';
 
+    // per-track cached status fields (recomputed on track change)
+    var stFmt = '';
+    var stDur = 0;
+    var stNumChans = 0;
+    var stNumIns = 0;
+    var stNumSmp = 0;
+    var stCached = false;
+
+    var vuFills = null;          // NodeList of .kd-vu-fill, one per channel
+    var vuLevels = null;         // smoothed displayed levels (Float32Array)
+
+    var scopeCanvas = null;
+    var scopeCtx = null;
+    var scopeAnalyser = null;     // AnalyserNode on window.kdAudio.context
+    var scopeBuf = null;          // Float32Array time-domain buffer
+    var scopeSrc = null;          // the audio node currently tapped
+
     // ---- libopenmpt formatters (Furnace-style) -------------------------
     var NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
     function fmtNote(n) {
@@ -96,6 +113,26 @@
                : (typeof window.UTF8ToString === 'function') ? window.UTF8ToString
                : null;
         return fn ? fn(ptr) : '';
+    }
+
+    // write an ASCII JS string into the heap as a NUL-terminated C string,
+    // run fn(ptr), then free. Used to pass keys to get_metadata.
+    function withCStr(s, fn) {
+        var L = window.libopenmpt;
+        var ptr = L._malloc(s.length + 1);
+        for (var i = 0; i < s.length; i++) L.HEAPU8[ptr + i] = s.charCodeAt(i) & 0x7f;
+        L.HEAPU8[ptr + s.length] = 0;
+        try { return fn(ptr); } finally { L._free(ptr); }
+    }
+    function getMeta(mp, key) {
+        try {
+            return withCStr(key, function (keyPtr) {
+                var p = libopenmpt._openmpt_module_get_metadata(mp, keyPtr);
+                var s = rdStr(p);
+                if (libopenmpt._openmpt_free_string) libopenmpt._openmpt_free_string(p);
+                return (s || '').replace(/^\s+|\s+$/g, '');
+            });
+        } catch (e) { return ''; }
     }
 
     // Pull the exact display glyph libopenmpt would print for one command
@@ -152,10 +189,22 @@
                 '<a href="#" class="kd-tracker-toggle" title="minimize / restore">−</a>' +
             '</div>' +
             '<div class="kd-tracker-cols"></div>' +
-            '<div class="kd-tracker-body"></div>';
+            '<div class="kd-tracker-body"></div>' +
+            '<canvas class="kd-tracker-scope"></canvas>' +
+            '<div class="kd-tracker-status">' +
+                '<span class="kd-st-bpm">--</span>' +
+                '<span class="kd-st-speed">--</span>' +
+                '<span class="kd-st-pos">--</span>' +
+                '<span class="kd-st-chans">--</span>' +
+                '<span class="kd-st-counts">--</span>' +
+                '<span class="kd-st-fmt">--</span>' +
+                '<span class="kd-st-time">--</span>' +
+            '</div>';
         viz.appendChild(panel);
         headEl = panel.querySelector('.kd-tracker-cols');
         bodyEl = panel.querySelector('.kd-tracker-body');
+        scopeCanvas = panel.querySelector('.kd-tracker-scope');
+        scopeCtx = scopeCanvas ? scopeCanvas.getContext('2d') : null;
         applySavedPosition();
         applySavedCollapsedState();
         attachDrag(panel.querySelector('.kd-tracker-title'));
@@ -169,8 +218,11 @@
             var ro = new ResizeObserver(function () {
                 prevTapePad = -1;
                 applyBodyPadding();
+                applyTrackerWidth();
             });
             ro.observe(bodyEl);
+            var vizEl = document.getElementById('kd-viz-panel');
+            if (vizEl) ro.observe(vizEl);
         }
         var toggleBtn = panel.querySelector('.kd-tracker-toggle');
         toggleBtn.addEventListener('click', function (e) {
@@ -203,6 +255,10 @@
         prevModPtr = 0;
         prevTid = null;
         activeChans = null;
+        stCached = false;
+        vuFills = null;
+        vuLevels = null;
+        scopeSrc = null;
     }
 
     // Compute channels that ever produce a note in the song. Effort
@@ -391,9 +447,13 @@
         var h = '<span class="rowidx">  </span>';
         for (var ci = 0; ci < chans.length; ci++) {
             h += '<span class="cell" title="' + esc(channelLabel(mp, chans[ci])) + '">' +
-                 channelLabel(mp, chans[ci]) + '</span>';
+                 '<span class="kd-ch-name">' + channelLabel(mp, chans[ci]) + '</span>' +
+                 '<span class="kd-vu"><i class="kd-vu-fill"></i></span>' +
+                 '</span>';
         }
         headEl.innerHTML = h;
+        vuFills = headEl.querySelectorAll('.kd-vu-fill');
+        vuLevels = new Float32Array(chans.length);
     }
 
     // Build the [prev | cur | next] tape. Called when order changes.
@@ -423,6 +483,7 @@
 
         panel.style.setProperty('--kd-tracker-chans', activeChans.length);
         applyBodyPadding();
+        applyTrackerWidth();
     }
 
     // Pad the body with half its visible height (minus half a row) on
@@ -439,6 +500,33 @@
         bodyEl.style.paddingTop = pad + 'px';
         bodyEl.style.paddingBottom = pad + 'px';
         prevTapePad = pad;
+    }
+
+    // Size the tracker to its channel count: content width when it fits,
+    // capped at the available panel width (with a horizontal scrollbar)
+    // when there are too many channels. Adds .kd-tracker-fits when no
+    // horizontal scroll is needed so CSS can hide the scrollbar.
+    function applyTrackerWidth() {
+        if (!panel || !bodyEl || !activeChans) return;
+        var viz = document.getElementById('kd-viz-panel');
+        if (!viz) return;
+        // measure a rendered row's natural width (rowidx + all cells).
+        // bail if the panel isn't laid out yet (hidden / no rows) so we
+        // never collapse the tracker to a few px of chrome.
+        var firstRow = bodyEl.querySelector('.row');
+        var content = firstRow ? firstRow.scrollWidth : 0;
+        if (content <= 0) return;
+        // panel chrome: the body sits flush; add the tracker's own L/R border.
+        var cs = window.getComputedStyle(panel);
+        var chrome = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+        var desired = content + chrome + 2; // +2 safety
+        // available width inside the viz panel, leaving the same 12px side
+        // inset the CSS uses, on both sides.
+        var avail = viz.clientWidth - 24;
+        var w = Math.min(desired, avail);
+        if (w > 0) panel.style.width = Math.floor(w) + 'px';
+        var fits = desired <= avail + 1;
+        panel.classList.toggle('kd-tracker-fits', fits);
     }
 
     // Mark the playing row, scroll it to the body's vertical centre.
@@ -463,6 +551,132 @@
             bodyEl.scrollTop = cur.offsetTop - (bodyH - rowH) / 2;
         }
         prevPlayRow = orderRelativeIdx;
+    }
+
+    function fmtMS(s) {
+        if (!isFinite(s) || s < 0) s = 0;
+        var m = Math.floor(s / 60), ss = Math.floor(s % 60);
+        return m + ':' + (ss < 10 ? '0' : '') + ss;
+    }
+    function setSt(cls, txt) {
+        var el = panel.querySelector('.' + cls);
+        if (el && el.textContent !== txt) el.textContent = txt;
+    }
+    function cacheTrackStatus(mp) {
+        stNumChans = libopenmpt._openmpt_module_get_num_channels(mp) || 0;
+        stNumIns = libopenmpt._openmpt_module_get_num_instruments
+            ? (libopenmpt._openmpt_module_get_num_instruments(mp) || 0) : 0;
+        stNumSmp = libopenmpt._openmpt_module_get_num_samples
+            ? (libopenmpt._openmpt_module_get_num_samples(mp) || 0) : 0;
+        stDur = libopenmpt._openmpt_module_get_duration_seconds
+            ? (libopenmpt._openmpt_module_get_duration_seconds(mp) || 0) : 0;
+        stFmt = getMeta(mp, 'type_long') || getMeta(mp, 'type') || 'module';
+        stCached = true;
+    }
+    function updateStatus(mp, curOrd, curRow) {
+        if (!panel) return;
+        if (!stCached) cacheTrackStatus(mp);
+        var bpm = libopenmpt._openmpt_module_get_current_tempo(mp);
+        var spd = libopenmpt._openmpt_module_get_current_speed(mp);
+        var curPat = libopenmpt._openmpt_module_get_current_pattern(mp);
+        var nrows = libopenmpt._openmpt_module_get_pattern_num_rows(mp, curPat);
+        var nords = libopenmpt._openmpt_module_get_num_orders(mp);
+        var playing = libopenmpt._openmpt_module_get_current_playing_channels
+            ? libopenmpt._openmpt_module_get_current_playing_channels(mp) : 0;
+        var pos = libopenmpt._openmpt_module_get_position_seconds
+            ? libopenmpt._openmpt_module_get_position_seconds(mp) : 0;
+        var hx = function (v) { return ('0' + (v & 0xFF).toString(16).toUpperCase()).slice(-2); };
+        setSt('kd-st-bpm', 'BPM ' + bpm);
+        setSt('kd-st-speed', 'SPD ' + spd);
+        setSt('kd-st-pos', 'Ord ' + curOrd + '/' + (nords - 1) + ' · Pat ' + curPat + ' · Row ' + hx(curRow) + '/' + hx(nrows));
+        setSt('kd-st-chans', 'Ch ' + playing + '/' + stNumChans);
+        setSt('kd-st-counts', 'Ins ' + stNumIns + ' · Smp ' + stNumSmp);
+        setSt('kd-st-fmt', stFmt);
+        setSt('kd-st-time', fmtMS(pos) + ' / ' + fmtMS(stDur));
+    }
+
+    // Per-channel VU bars (horizontal fill under each channel name). Uses
+    // libopenmpt's per-channel VU; eased toward the target so it doesn't
+    // strobe. Cheap: one FFI pair per active channel per tick.
+    function updateVU(mp) {
+        if (!vuFills || !vuLevels || !activeChans) return;
+        for (var k = 0; k < activeChans.length && k < vuFills.length; k++) {
+            var ch = activeChans[k];
+            var l = libopenmpt._openmpt_module_get_current_channel_vu_left(mp, ch) || 0;
+            var r = libopenmpt._openmpt_module_get_current_channel_vu_right(mp, ch) || 0;
+            var target = Math.max(l, r);
+            if (target > 1) target = 1; else if (target < 0) target = 0;
+            // attack fast, release slow
+            var cur = vuLevels[k];
+            cur = target > cur ? target : cur + (target - cur) * 0.35;
+            vuLevels[k] = cur;
+            vuFills[k].style.width = (cur * 100).toFixed(1) + '%';
+        }
+    }
+
+    // Lazily create one AnalyserNode on the shared context and tap whatever
+    // source the visualizer is feeding (chiptune ScriptProcessor or the
+    // MediaElementSource). Re-taps when the source changes. The analyser is
+    // a passive sink, so it does not disturb the existing audio graph.
+    function ensureScopeAnalyser() {
+        var ctx = window.kdAudio && window.kdAudio.context;
+        if (!ctx) return false;
+        if (!scopeAnalyser) {
+            try {
+                scopeAnalyser = ctx.createAnalyser();
+                scopeAnalyser.fftSize = 1024;
+                scopeAnalyser.smoothingTimeConstant = 0;
+                scopeBuf = new Float32Array(scopeAnalyser.fftSize);
+            } catch (e) { scopeAnalyser = null; return false; }
+        }
+        // resolve the current source the same way kd-visualizer does
+        var src = null;
+        if (window.kdChiptune && window.kdChiptune.ChiptuneAudio
+            && window.mp && window.mp.au instanceof window.kdChiptune.ChiptuneAudio) {
+            var p = window.kdChiptune.getPlayer && window.kdChiptune.getPlayer();
+            src = p && p.currentPlayingNode;
+        } else if (window.mp && window.mp.au) {
+            src = window.mp.au._kdSource;
+        }
+        if (src && src !== scopeSrc) {
+            try { src.connect(scopeAnalyser); scopeSrc = src; }
+            catch (e) { /* already connected or incompatible */ scopeSrc = src; }
+        }
+        return !!scopeAnalyser;
+    }
+
+    function sizeScopeCanvas() {
+        if (!scopeCanvas) return;
+        var r = scopeCanvas.getBoundingClientRect();
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var W = Math.max(2, Math.floor(r.width * dpr));
+        var H = Math.max(2, Math.floor(r.height * dpr));
+        if (scopeCanvas.width !== W || scopeCanvas.height !== H) {
+            scopeCanvas.width = W; scopeCanvas.height = H;
+        }
+    }
+
+    function drawScope() {
+        if (!scopeCtx || !ensureScopeAnalyser()) return;
+        sizeScopeCanvas();
+        var W = scopeCanvas.width, H = scopeCanvas.height;
+        if (W < 2 || H < 2) return;
+        scopeAnalyser.getFloatTimeDomainData(scopeBuf);
+        var ctx = scopeCtx;
+        ctx.clearRect(0, 0, W, H);
+        ctx.lineWidth = Math.max(1, H / 24);
+        ctx.strokeStyle = '#00ff99';
+        ctx.shadowColor = 'rgba(0,255,150,0.5)';
+        ctx.shadowBlur = ctx.lineWidth * 1.5;
+        ctx.beginPath();
+        var n = scopeBuf.length, mid = H / 2;
+        for (var i = 0; i < n; i++) {
+            var x = (i / (n - 1)) * W;
+            var y = mid - scopeBuf[i] * (mid - ctx.lineWidth);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
     }
 
     // Rows advance at most ~20×/s even on fast modules, so polling at 60fps
@@ -506,16 +720,23 @@
             prevTid = curTid;
             tapeOrd = -1;
             activeChans = null;
+            stCached = false;
         }
 
         if (curOrd !== tapeOrd) {
-            rebuildTape(mp, curOrd);
+            // make the panel visible BEFORE rebuilding so applyTrackerWidth
+            // (called at the end of rebuildTape) can measure laid-out rows.
             panel.classList.add('kd-tracker-on');
+            rebuildTape(mp, curOrd);
         }
 
         if (curRow !== prevPlayRow && curRow >= 0 && curRow < tapeCurLen) {
             highlightRow(curRow);
         }
+
+        updateStatus(mp, curOrd, curRow);
+        updateVU(mp);
+        drawScope();
     }
 
     function start() {
@@ -602,6 +823,35 @@
     }
 
     window.kdTracker = {
+        // Re-clamp the (possibly dragged) tracker box back inside the viz
+        // panel. The dragged left/top are px relative to #kd-viz-panel and
+        // persisted to localStorage; when the panel shrinks (e.g. exiting
+        // fullscreen) a far-corner position lands outside the smaller panel
+        // and the tracker vanishes. This pins it back into view WITHOUT
+        // rewriting the saved position, and is a no-op when already inside.
+        clampPosition: function () {
+            if (!panel || !panel.classList.contains('kd-tracker-on')) return;
+            var viz = document.getElementById('kd-viz-panel');
+            if (!viz) return;
+            var vr = viz.getBoundingClientRect();
+            var r = panel.getBoundingClientRect();
+            var curLeft = r.left - vr.left;
+            var curTop = r.top - vr.top;
+            var maxLeft = Math.max(0, vr.width - r.width);
+            var maxTop = Math.max(0, vr.height - r.height);
+            var nl = Math.max(0, Math.min(curLeft, maxLeft));
+            var nt = Math.max(0, Math.min(curTop, maxTop));
+            // only convert to inline positioning when actually out of bounds,
+            // so an un-dragged tracker keeps its responsive CSS placement.
+            if (Math.abs(nl - curLeft) > 0.5 || Math.abs(nt - curTop) > 0.5) {
+                panel.style.left = nl + 'px';
+                panel.style.top = nt + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+                panel.style.transform = 'none';
+            }
+        },
+        onAudioChanged: function () { scopeSrc = null; },
         rebuild: function () { tapeOrd = -1; activeChans = null; prevTapePad = -1; },
         resetPosition: function () {
             try { localStorage.removeItem(SAVE_KEY); } catch (e) {}

@@ -111,6 +111,10 @@ html[class] {
        sidebar and folder share the same gap on both sides. */
     --kd-gap: 16px;
     --kd-tree-w: 280px;
+
+    /* vertical space the viz panel steals from the file browser in large
+       mode; 0 otherwise so normal layout is unchanged. JS keeps it live. */
+    --kd-viz-occupy: 0px;
 }
 
 html.np_open {
@@ -403,7 +407,7 @@ html#ht_brw #ggrid {
 }
 
 html#ht_brw.np_open #wrap {
-    margin-bottom: calc(2 * var(--kd-gap) + var(--kd-widget-h)) !important;
+    margin-bottom: calc(2 * var(--kd-gap) + var(--kd-widget-h) + var(--kd-viz-occupy)) !important;
 }
 
 /* Desktop sidebar collapse — when the hamburger sets html.kd-tree-collapsed,
@@ -1166,6 +1170,19 @@ html#ht_spl body {
     pointer-events: auto;
 }
 
+/* "large" mode — a tall fixed panel (not OS fullscreen). Anchored above
+   the widget exactly like windowed mode; just much taller. The widget
+   stays at the bottom and is NOT moved into the panel (that is fullscreen
+   only). The file-browser reservation below keeps grid items clickable. */
+#ht_brw #kd-viz-panel.kd-viz-large.kd-viz-open {
+    /* as tall as possible while still leaving a usable file-browser strip
+       (~200px) above the panel — the file browser is reserved space via
+       --kd-viz-occupy so its rows stay clickable on top of the panel.
+       440px ≈ header+footer+widget+gaps (~232) + ~200 browser. */
+    height: calc(100vh - 440px) !important;
+    min-height: 180px;
+}
+
 #ht_brw #kd-viz-panel:fullscreen,
 #ht_brw #kd-viz-panel:-webkit-full-screen {
     height: 100% !important;
@@ -1219,7 +1236,8 @@ html#ht_spl body {
     top: 10px;
     right: 12px;
     left: auto;
-    max-width: calc(50% - 24px);
+    width: min(360px, calc(100% - 24px));
+    box-sizing: border-box;
     padding: 4px 10px;
     background: rgba(7, 24, 35, 0.35);
     border: 1px solid rgba(0, 255, 150, 0.25);
@@ -1232,12 +1250,13 @@ html#ht_spl body {
     text-decoration: none;
     cursor: pointer;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     z-index: 4;
     transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+    display: flex;
+    align-items: center;
 }
 #ht_brw #kd-viz-info:hover {
     background: rgba(0, 255, 150, 0.18);
@@ -1248,6 +1267,33 @@ html#ht_spl body {
     content: ' ▾';
     color: var(--a);
     opacity: 0.7;
+    flex: 0 0 auto;
+    margin-left: 4px;
+}
+
+/* preset-name clip + marquee. The inner span holds the full text; when it
+   overflows the fixed-width pill it ping-pong scrolls, paused on hover. */
+#ht_brw #kd-viz-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    display: block;
+}
+#ht_brw #kd-viz-name .kd-viz-name-inner {
+    display: inline-block;
+    white-space: nowrap;
+    will-change: transform;
+}
+#ht_brw #kd-viz-name.marquee .kd-viz-name-inner {
+    animation: kd-viz-marquee var(--kd-marquee-dur, 8s) ease-in-out infinite alternate;
+}
+#ht_brw #kd-viz-info:hover #kd-viz-name.marquee .kd-viz-name-inner {
+    animation-play-state: paused;
+}
+@keyframes kd-viz-marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(var(--kd-marquee-dx, 0)); }
 }
 
 /* searchable preset dropdown — anchored under the info pill */
@@ -1317,6 +1363,13 @@ html#ht_spl body {
     font-style: italic;
     text-align: center;
     pointer-events: none;
+}
+#ht_brw #kd-viz-search-list li.kd-viz-more-sentinel {
+    height: 1px;
+    padding: 0;
+    border: none;
+    pointer-events: none;
+    list-style: none;
 }
 #ht_brw #kd-viz-search-list li:hover {
     background: rgba(0, 255, 150, 0.1);
@@ -1427,7 +1480,8 @@ html#ht_spl body {
     position: absolute;
     top: 56px;
     left: 12px;
-    width: min(640px, calc(100% - 24px));
+    width: min(640px, calc(100% - 24px));   /* initial; JS overrides via style.width */
+    max-width: calc(100% - 24px);
     height: min(180px, calc(100% - 140px));
     /* heavier transparency so the visualizer behind the tracker
        remains visible. Backdrop blur keeps cell text readable. */
@@ -1555,13 +1609,35 @@ html#ht_spl body {
 #ht_brw #kd-tracker .kd-tracker-cols .cell {
     flex: 0 0 auto;
     width: 8.2em;            /* matches body cell width */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
     text-align: center;
     border-right: 1px solid rgba(0, 255, 150, 0.08);
     /* channel names (from the module) can be long — clip so the header
        columns stay aligned with the body's fixed-width cells. */
     overflow: hidden;
     white-space: nowrap;
+}
+#ht_brw #kd-tracker .kd-tracker-cols .cell .kd-ch-name {
+    overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
+}
+#ht_brw #kd-tracker .kd-vu {
+    display: block;
+    height: 3px;
+    margin: 1px 2px 0;
+    background: rgba(0, 255, 150, 0.10);
+    border-radius: 2px;
+    overflow: hidden;
+}
+#ht_brw #kd-tracker .kd-vu .kd-vu-fill {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #008000, #00ff66 70%, #aaffcc);
+    box-shadow: 0 0 4px rgba(0, 255, 120, 0.5);
 }
 #ht_brw #kd-tracker .kd-tracker-cols .cell:last-child {
     border-right: none;
@@ -1587,6 +1663,25 @@ html#ht_spl body {
 }
 #ht_brw #kd-tracker .kd-tracker-body::-webkit-scrollbar {
     display: none;
+}
+
+/* horizontal scroll only when channels overflow the panel width.
+   .kd-tracker-fits (set by JS) means content fits -> no scrollbar. */
+#ht_brw #kd-tracker.kd-tracker-fits .kd-tracker-body {
+    overflow-x: hidden;
+}
+#ht_brw #kd-tracker:not(.kd-tracker-fits) .kd-tracker-body {
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,255,150,0.4) transparent;
+}
+#ht_brw #kd-tracker:not(.kd-tracker-fits) .kd-tracker-body::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+}
+#ht_brw #kd-tracker:not(.kd-tracker-fits) .kd-tracker-body::-webkit-scrollbar-thumb {
+    background: rgba(0,255,150,0.4);
+    border-radius: 3px;
 }
 
 /* one pattern row */
@@ -1681,6 +1776,55 @@ html#ht_spl body {
 #ht_brw #kd-tracker .cell i.fx-time    { color: #8000ff; }   /* PATTERN_EFFECT_TIME */
 #ht_brw #kd-tracker .cell i.fx-invalid { color: #ff0000; }   /* PATTERN_EFFECT_INVALID */
 #ht_brw #kd-tracker .cell i.fx-sysprim { color: #80ff00; }   /* PATTERN_EFFECT_SYS_PRIMARY */
+
+/* Furnace-style status bar pinned to the bottom of the tracker panel */
+#ht_brw #kd-tracker .kd-tracker-status {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    align-items: center;
+    padding: 3px 8px;
+    border-top: 1px solid rgba(0, 255, 150, 0.18);
+    background: rgba(0, 0, 0, 0.32);
+    font-family: var(--font-mono);
+    font-size: 0.62em;
+    letter-spacing: 0.04em;
+    color: var(--a);
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+}
+#ht_brw #kd-tracker .kd-tracker-status > span {
+    opacity: 0.92;
+}
+#ht_brw #kd-tracker .kd-tracker-status .kd-st-fmt {
+    color: var(--fg-weak);
+    opacity: 0.7;
+}
+#ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-status {
+    display: none;
+}
+@media (max-width: 760px) {
+    #ht_brw #kd-tracker .kd-tracker-status { font-size: 0.56em; gap: 1px 6px; }
+    #ht_brw #kd-tracker .kd-tracker-status .kd-st-counts { display: none; }
+}
+
+/* master oscilloscope strip, just above the status bar */
+#ht_brw #kd-tracker .kd-tracker-scope {
+    flex: 0 0 auto;
+    display: block;
+    width: 100%;
+    height: 34px;
+    background: rgba(0, 0, 0, 0.35);
+    border-top: 1px solid rgba(0, 255, 150, 0.14);
+}
+#ht_brw #kd-tracker.kd-tracker-collapsed .kd-tracker-scope {
+    display: none;
+}
+@media (max-width: 760px) {
+    #ht_brw #kd-tracker .kd-tracker-scope { height: 24px; }
+}
 
 /* mobile — shrink fonts and tighten gutters so more channels fit */
 @media (max-width: 760px) {
