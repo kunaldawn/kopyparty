@@ -1633,7 +1633,10 @@ html#ht_spl body {
     --lvl: 0;
     display: grid;
     grid-template-columns: 1.7em 2.6em 1.4em;
-    grid-template-areas: "num note inst" "vu vu vu";
+    grid-template-areas:
+        "num note inst"
+        "fx  fx   fx"
+        "vu  vu   vu";
     align-items: center;
     gap: 0 4px;
     padding: 3px 5px 2px;
@@ -1676,6 +1679,30 @@ html#ht_spl body {
     color: rgba(255, 255, 255, 0.20);
     font-weight: 400;
 }
+/* current-row effect column (Furnace-style glyph+param, colour-coded). Sits
+   on its own line spanning the tile. */
+#ht_brw #kd-tracker .kd-ch-fx {
+    grid-area: fx;
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#ht_brw #kd-tracker .kd-ch-fx.inactive {
+    color: rgba(255, 255, 255, 0.18);
+    font-weight: 400;
+}
+/* Furnace effect-category palette (guiConst.cpp defaults) */
+#ht_brw #kd-tracker .kd-ch-fx.fx-misc    { color: #4d4dff; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-pitch   { color: #ffff00; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-volume  { color: #00ff00; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-panning { color: #00ffff; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-speed   { color: #ff00ff; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-song    { color: #ff5050; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-time    { color: #b070ff; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-invalid { color: #ff0000; }
+#ht_brw #kd-tracker .kd-ch-fx.fx-sysprim { color: #80ff00; }
 /* per-channel VU bar spans the tile's full width on its own row */
 #ht_brw #kd-tracker .kd-vu {
     grid-area: vu;

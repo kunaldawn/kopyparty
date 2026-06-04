@@ -43,6 +43,7 @@
     var tiles = null;           // NodeList of .kd-ch-tile
     var tileNote = null;        // NodeList of .kd-ch-note
     var tileInst = null;        // NodeList of .kd-ch-inst
+    var tileFx = null;          // NodeList of .kd-ch-fx (current-row effect)
     var vuFills = null;         // NodeList of .kd-vu-fill
     var vuLevels = null;        // smoothed displayed VU levels
     var hitLevel = null;        // per-channel note-trigger flash (1 on strike, decays)
@@ -150,6 +151,39 @@
         ) & 0xFF;
     }
 
+    // libopenmpt's own formatted glyph for one command of a cell — used for
+    // the format-native effect letter (IT "A", MOD "0", S3M "Q", …). Allocates
+    // an openmpt string we must free; only called for cells that carry an
+    // effect (sparse), so the alloc churn is negligible.
+    function fmtCmdStr(mp, pat, row, ch, cmd) {
+        var ptr = libopenmpt._openmpt_module_format_pattern_row_channel_command(mp, pat, row, ch, cmd);
+        if (!ptr) return '';
+        var s = rdStr(ptr);
+        if (libopenmpt._openmpt_free_string) libopenmpt._openmpt_free_string(ptr);
+        return (s || '').replace(/^\s+|\s+$/g, '');
+    }
+
+    // OpenMPT EffectCommand enum (cmd index 3) → Furnace effect-colour bucket,
+    // so each effect gets the colour Furnace would give the equivalent op.
+    // Values per soundlib/modcommand.h; unknown → 'sysprim'.
+    var FX_CAT = {
+        1: 'misc', 2: 'pitch', 3: 'pitch', 4: 'pitch', 5: 'pitch', 6: 'volume',
+        7: 'volume', 8: 'volume', 9: 'panning', 10: 'misc', 11: 'volume',
+        12: 'song', 13: 'volume', 14: 'song', 15: 'misc', 16: 'speed', 17: 'time',
+        18: 'volume', 19: 'misc', 20: 'misc', 21: 'volume', 22: 'volume',
+        23: 'volume', 24: 'volume', 25: 'misc', 26: 'pitch', 27: 'panning',
+        28: 'pitch', 29: 'panning', 30: 'misc', 31: 'misc', 32: 'misc', 33: 'misc',
+        34: 'misc', 35: 'pitch', 36: 'pitch', 37: 'invalid',
+        38: 'pitch', 39: 'pitch', 40: 'pitch', 41: 'pitch', 42: 'misc', 43: 'misc',
+        44: 'misc', 45: 'misc', 46: 'volume', 47: 'misc', 48: 'misc', 49: 'volume',
+        50: 'pitch', 51: 'pitch', 52: 'pitch', 53: 'pitch', 54: 'pitch', 55: 'pitch',
+        56: 'volume', 57: 'volume'
+    };
+    function effectColorClass(typ) {
+        if (typ <= 0) return 'misc';
+        return FX_CAT[typ] || 'sysprim';
+    }
+
     // ---- panel ----------------------------------------------------------
     function buildPanel() {
         if (panel) return panel;
@@ -211,7 +245,7 @@
         prevModPtr = 0;
         prevTid = null;
         stCached = false;
-        tiles = tileNote = tileInst = vuFills = vuLevels = hitLevel = lastNote = lastInst = null;
+        tiles = tileNote = tileInst = tileFx = vuFills = vuLevels = hitLevel = lastNote = lastInst = null;
         fftSrc = null;
     }
 
@@ -227,6 +261,7 @@
                 '<span class="kd-ch-num">' + ('0' + (ch + 1)).slice(-2) + '</span>' +
                 '<span class="kd-ch-note inactive">···</span>' +
                 '<span class="kd-ch-inst inactive">··</span>' +
+                '<span class="kd-ch-fx inactive">···</span>' +
                 '<span class="kd-vu"><i class="kd-vu-fill"></i></span>' +
                 '</div>';
         }
@@ -234,6 +269,7 @@
         tiles = gridEl.querySelectorAll('.kd-ch-tile');
         tileNote = gridEl.querySelectorAll('.kd-ch-note');
         tileInst = gridEl.querySelectorAll('.kd-ch-inst');
+        tileFx = gridEl.querySelectorAll('.kd-ch-fx');
         vuFills = gridEl.querySelectorAll('.kd-vu-fill');
         vuLevels = new Float32Array(numChans);
         hitLevel = new Float32Array(numChans);
@@ -281,6 +317,32 @@
                 if (iEl.textContent !== it) iEl.textContent = it;
                 var ic = li > 0 ? 'kd-ch-inst' : 'kd-ch-inst inactive';
                 if (iEl.className !== ic) iEl.className = ic;
+            }
+            // effect column — shown per-row like Furnace (the effect glyph +
+            // param, coloured by Furnace category). Cleared on rows with no
+            // effect; transient by nature. We surface the main effect column,
+            // and fall back to the volume-column effect when there's no main
+            // one so vol-column commands (e.g. IT pan/vol slides) still show.
+            var fEl = tileFx[ch];
+            if (fEl) {
+                var fxt = getCmd(mp, pat, row, ch, 3);   // effect type
+                var ft, fc;
+                if (fxt > 0) {
+                    var glyph = fmtCmdStr(mp, pat, row, ch, 3) || '?';
+                    ft = glyph + hex2(getCmd(mp, pat, row, ch, 5));
+                    fc = 'kd-ch-fx fx-' + effectColorClass(fxt);
+                } else {
+                    var volCmd = getCmd(mp, pat, row, ch, 2);   // volume-column effect
+                    if (volCmd > 0) {
+                        var vg = fmtCmdStr(mp, pat, row, ch, 2) || '?';
+                        ft = vg + hex2(getCmd(mp, pat, row, ch, 4));
+                        fc = 'kd-ch-fx fx-volume';
+                    } else {
+                        ft = '···'; fc = 'kd-ch-fx inactive';
+                    }
+                }
+                if (fEl.textContent !== ft) fEl.textContent = ft;
+                if (fEl.className !== fc) fEl.className = fc;
             }
         }
     }
