@@ -642,6 +642,8 @@
         // panel size just changed; pull the tracker back into view once the
         // layout settles.
         setTimeout(function () {
+            if (window.kdTracker && window.kdTracker.relayout)
+                window.kdTracker.relayout();
             if (window.kdTracker && window.kdTracker.clampPosition)
                 window.kdTracker.clampPosition();
             updateOccupy();
@@ -803,6 +805,8 @@
         setTimeout(function () {
             resizeCanvas();
             updateOccupy();
+            if (window.kdTracker && window.kdTracker.relayout)
+                window.kdTracker.relayout();
             if (window.kdTracker && window.kdTracker.clampPosition)
                 window.kdTracker.clampPosition();
         }, 340);

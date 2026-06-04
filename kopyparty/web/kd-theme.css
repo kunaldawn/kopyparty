@@ -1481,11 +1481,18 @@ html#ht_spl body {
     top: 56px;
     left: 12px;
     /* compact: hug the channel-tile grid (column count set by JS via
-       --kd-cols, capped at 8) and auto-fit height. background + no-blur
-       come from the PERFORMANCE block lower in this file. */
+       --kd-cols) and auto-fit height. background + no-blur come from the
+       PERFORMANCE block lower in this file.
+       --kd-tracker-scale (set by JS, persisted) is the user zoom: it drives
+       the panel font-size (all em text + em column widths scale) and the
+       calc(px*scale) structural sizes below, so the whole UI scales together
+       and the window grows with it. Height auto-fits; it only scrolls when it
+       can't grow any taller (max-height ≈ available space). */
+    --kd-tracker-scale: 1;
+    font-size: calc(15px * var(--kd-tracker-scale));
     width: auto;
     max-width: calc(100% - 24px);
-    max-height: calc(100% - 120px);
+    max-height: calc(100% - 84px);
     border: 1px solid rgba(0, 255, 150, 0.28);
     border-radius: 10px;
     box-shadow:
@@ -1517,8 +1524,8 @@ html#ht_spl body {
     bottom: auto;
     transform: translateX(-50%);
     width: auto;
-    max-width: 80vw;
-    max-height: 50vh;
+    max-width: 90vw;
+    max-height: calc(100% - 110px);
     border-color: rgba(0, 255, 150, 0.22);
 }
 
@@ -1536,8 +1543,8 @@ html#ht_spl body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 20px;
-    padding: 0 6px 0 8px;
+    height: calc(20px * var(--kd-tracker-scale));
+    padding: 0 calc(6px * var(--kd-tracker-scale)) 0 calc(8px * var(--kd-tracker-scale));
     background: linear-gradient(180deg, rgba(0, 255, 150, 0.14), rgba(0, 255, 150, 0.04));
     border-bottom: 1px solid rgba(0, 255, 150, 0.22);
     font-family: var(--font-mono);
@@ -1560,9 +1567,31 @@ html#ht_spl body {
     opacity: 0.85;
 }
 #ht_brw #kd-tracker .kd-tracker-head .kd-tracker-title,
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-zoom,
 #ht_brw #kd-tracker .kd-tracker-head .kd-tracker-toggle {
     position: relative;
     z-index: 1;                  /* above the FFT canvas */
+}
+/* zoom (font/UI scale) buttons */
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-zoom {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(15px * var(--kd-tracker-scale));
+    height: calc(14px * var(--kd-tracker-scale));
+    margin-right: calc(3px * var(--kd-tracker-scale));
+    padding: 0 calc(2px * var(--kd-tracker-scale));
+    color: var(--a);
+    font-size: 1.15em;
+    line-height: 1;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: background 0.12s, color 0.12s;
+}
+#ht_brw #kd-tracker .kd-tracker-head .kd-tracker-zoom:hover {
+    background: rgba(0, 255, 150, 0.2);
+    color: var(--a-hil);
 }
 #ht_brw #kd-tracker .kd-tracker-head .kd-tracker-title {
     flex: 1 1 auto;
@@ -1586,8 +1615,8 @@ html#ht_spl body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 14px;
+    width: calc(18px * var(--kd-tracker-scale));
+    height: calc(14px * var(--kd-tracker-scale));
     color: var(--a);
     font-size: 1.4em;
     line-height: 1;
@@ -1612,8 +1641,8 @@ html#ht_spl body {
        grid; --kd-cols (≤8) is set by JS. 1fr/minmax(0,…) collapse to 0 in a
        shrink-wrapped container, so a fixed em column is required here. */
     grid-template-columns: repeat(var(--kd-cols, 4), 5.6em);
-    gap: 2px;
-    padding: 4px;
+    gap: calc(2px * var(--kd-tracker-scale));
+    padding: calc(4px * var(--kd-tracker-scale));
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
@@ -1638,10 +1667,10 @@ html#ht_spl body {
         "fx  fx   fx"
         "vu  vu   vu";
     align-items: center;
-    gap: 0 4px;
-    padding: 3px 5px 2px;
+    gap: 0 calc(4px * var(--kd-tracker-scale));
+    padding: calc(3px * var(--kd-tracker-scale)) calc(5px * var(--kd-tracker-scale)) calc(2px * var(--kd-tracker-scale));
     min-width: 0;
-    background: rgba(0, 0, 0, 0.30);
+    background: rgba(0, 0, 0, 0.16);
     border: 1px solid rgba(0, 255, 150, calc(0.10 + 0.70 * var(--hit)));
     border-radius: 5px;
     box-shadow:
@@ -1652,6 +1681,13 @@ html#ht_spl body {
     font-size: 0.7em;
     line-height: 1.25;
     white-space: nowrap;
+}
+/* keep tile text crisp over the now-more-transparent background / milkdrop */
+#ht_brw #kd-tracker .kd-ch-num,
+#ht_brw #kd-tracker .kd-ch-note,
+#ht_brw #kd-tracker .kd-ch-inst,
+#ht_brw #kd-tracker .kd-ch-fx {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.85);
 }
 #ht_brw #kd-tracker .kd-ch-num {
     grid-area: num;
@@ -1707,9 +1743,9 @@ html#ht_spl body {
 #ht_brw #kd-tracker .kd-vu {
     grid-area: vu;
     display: block;
-    height: 3px;
-    margin-top: 3px;
-    background: rgba(0, 255, 150, 0.10);
+    height: calc(3px * var(--kd-tracker-scale));
+    margin-top: calc(3px * var(--kd-tracker-scale));
+    background: rgba(0, 255, 150, 0.12);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -1726,11 +1762,11 @@ html#ht_spl body {
     flex: 0 0 auto;
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 10px;
+    gap: calc(2px * var(--kd-tracker-scale)) calc(10px * var(--kd-tracker-scale));
     align-items: center;
-    padding: 3px 8px;
+    padding: calc(3px * var(--kd-tracker-scale)) calc(8px * var(--kd-tracker-scale));
     border-top: 1px solid rgba(0, 255, 150, 0.18);
-    background: rgba(0, 0, 0, 0.32);
+    background: rgba(0, 0, 0, 0.18);
     font-family: var(--font-mono);
     font-size: 0.62em;
     letter-spacing: 0.04em;
@@ -1738,6 +1774,7 @@ html#ht_spl body {
     text-transform: uppercase;
     white-space: nowrap;
     overflow: hidden;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 #ht_brw #kd-tracker .kd-tracker-status > span {
     opacity: 0.92;
@@ -2925,12 +2962,15 @@ html#ht_rup #tw th {
 #ht_brw #kd-viz-info { background: rgba(7, 24, 35, 0.72); }
 #ht_brw #kd-viz-ctrl { background: rgba(7, 24, 35, 0.6); }
 #ht_brw #kd-viz-music > #widget.open > #widgeti { background: rgba(7, 24, 35, 0.78) !important; }
+/* more transparent so the milkdrop visualization shows through the panel —
+   the per-tile / status backgrounds + text-shadows keep text and the neon
+   highlights (hit glow, VU, FFT) readable on top. */
 #ht_brw #kd-viz-panel #kd-tracker {
-    background: linear-gradient(180deg, rgba(12, 15, 22, 0.86), rgba(8, 10, 16, 0.9));
+    background: linear-gradient(180deg, rgba(12, 15, 22, 0.40), rgba(8, 10, 16, 0.46));
 }
 #ht_brw #kd-viz-panel:fullscreen #kd-tracker,
 #ht_brw #kd-viz-panel:-webkit-full-screen #kd-tracker {
-    background: rgba(6, 8, 13, 0.82);
+    background: rgba(6, 8, 13, 0.34);
 }
 
 /* ======================================================================

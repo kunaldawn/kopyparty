@@ -53,6 +53,13 @@
     var dragState = null;
     var SAVE_KEY = 'kd_tracker_pos';
 
+    // user UI scale (zoom). Drives --kd-tracker-scale so the whole tracker —
+    // font, tiles, spacing — scales together and the window grows with it.
+    var SCALE_KEY = 'kd_tracker_scale';
+    var uiScale = 1;
+    var layoutT = 0;
+    try { var _s = parseFloat(localStorage.getItem(SCALE_KEY)); if (_s >= 0.5 && _s <= 3) uiScale = _s; } catch (e) {}
+
     // per-track cached status fields (recomputed on track change)
     var stFmt = '';
     var stDur = 0;
@@ -195,6 +202,8 @@
             '<div class="kd-tracker-head">' +
                 '<canvas class="kd-tracker-fft"></canvas>' +
                 '<span class="kd-tracker-title">tracker</span>' +
+                '<a href="#" class="kd-tracker-zoom" data-z="out" title="smaller (font / UI scale)">A−</a>' +
+                '<a href="#" class="kd-tracker-zoom" data-z="in" title="larger (font / UI scale)">A+</a>' +
                 '<a href="#" class="kd-tracker-toggle" title="minimize / restore">−</a>' +
             '</div>' +
             '<div class="kd-tracker-grid"></div>' +
@@ -212,6 +221,7 @@
         gridEl = panel.querySelector('.kd-tracker-grid');
         fftCanvas = panel.querySelector('.kd-tracker-fft');
         fftCtx = fftCanvas ? fftCanvas.getContext('2d') : null;
+        panel.style.setProperty('--kd-tracker-scale', uiScale);
         applySavedPosition();
         applySavedCollapsedState();
         attachDrag(panel.querySelector('.kd-tracker-title'));
@@ -223,7 +233,48 @@
             toggleBtn.textContent = collapsed ? '+' : '−';
             try { localStorage.setItem('kd_tracker_collapsed', collapsed ? '1' : '0'); } catch (e) {}
         });
+        var zbtns = panel.querySelectorAll('.kd-tracker-zoom');
+        for (var zi = 0; zi < zbtns.length; zi++) {
+            zbtns[zi].addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                setScale(this.getAttribute('data-z') === 'in' ? uiScale * 1.15 : uiScale / 1.15);
+            });
+        }
+        // recompute column count when the available width changes. Entering /
+        // exiting OS fullscreen fires a window resize; large-mode toggles don't,
+        // so kd-visualizer.js also calls window.kdTracker.relayout().
+        window.addEventListener('resize', function () {
+            clearTimeout(layoutT);
+            layoutT = setTimeout(function () {
+                layoutGrid();
+                if (window.kdTracker && window.kdTracker.clampPosition) window.kdTracker.clampPosition();
+            }, 150);
+        });
         return panel;
+    }
+
+    // User zoom — clamp, persist, apply, relayout columns, keep in view.
+    function setScale(s) {
+        uiScale = Math.max(0.5, Math.min(3, s));
+        if (panel) panel.style.setProperty('--kd-tracker-scale', uiScale);
+        try { localStorage.setItem(SCALE_KEY, uiScale.toFixed(3)); } catch (e) {}
+        layoutGrid();
+        if (window.kdTracker && window.kdTracker.clampPosition) window.kdTracker.clampPosition();
+    }
+
+    // Choose the column count: as many tiles as fit the available width at the
+    // current scale, capped at 8 and the channel count. Fewer columns → more
+    // rows → the grid grows taller and only scrolls when it can't grow more.
+    function layoutGrid() {
+        if (!panel || !gridEl || !numChans) return;
+        var viz = document.getElementById('kd-viz-panel');
+        var availW = (viz ? viz.clientWidth : window.innerWidth) - 24;
+        var base = parseFloat(window.getComputedStyle(panel).fontSize) || 15;
+        var tilePx = 5.6 * base + 2 * uiScale;   // 5.6em column + grid gap
+        var fit = Math.max(1, Math.floor((availW + 2) / tilePx));
+        var cols = Math.min(numChans, 8, fit);
+        panel.style.setProperty('--kd-cols', cols);
     }
 
     function applySavedCollapsedState() {
@@ -253,8 +304,7 @@
     // rest), so all channels remain visible without horizontal scroll.
     function buildGrid(mp) {
         numChans = libopenmpt._openmpt_module_get_num_channels(mp) || 0;
-        var cols = Math.min(numChans, 8) || 1;
-        panel.style.setProperty('--kd-cols', cols);
+        panel.style.setProperty('--kd-cols', Math.min(numChans, 8) || 1);  // provisional
         var html = '';
         for (var ch = 0; ch < numChans; ch++) {
             html += '<div class="kd-ch-tile" title="' + esc(channelLabel(mp, ch)) + '">' +
@@ -275,6 +325,7 @@
         hitLevel = new Float32Array(numChans);
         lastNote = new Int16Array(numChans);   // 0 = never played
         lastInst = new Int16Array(numChans);
+        layoutGrid();   // pick the real column count for the current width/scale
     }
 
     // Update each tile's note/instrument from the currently-playing row.
@@ -639,6 +690,7 @@
             }
         },
         onAudioChanged: function () { fftSrc = null; },
+        relayout: function () { layoutGrid(); },
         rebuild: function () { numChans = 0; prevPat = -1; prevRow = -1; },
         resetPosition: function () {
             try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
