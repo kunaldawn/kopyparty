@@ -1624,8 +1624,13 @@ html#ht_spl body {
     background: rgba(0,255,150,0.4); border-radius: 3px;
 }
 
-/* a single channel tile: number · note · inst · VU bar, one compact row */
+/* a single channel tile: number · note · inst · VU bar, one compact row.
+   --hit (0..1, set by JS) flashes the tile border/glow on every note-on so
+   the grid pulses in rhythm even when a channel re-strikes the same pitch;
+   --lvl (0..1) is the channel's current level, used to dim idle notes. */
 #ht_brw #kd-tracker .kd-ch-tile {
+    --hit: 0;
+    --lvl: 0;
     display: grid;
     grid-template-columns: 1.7em 2.6em 1.4em;
     grid-template-areas: "num note inst" "vu vu vu";
@@ -1634,8 +1639,12 @@ html#ht_spl body {
     padding: 3px 5px 2px;
     min-width: 0;
     background: rgba(0, 0, 0, 0.30);
-    border: 1px solid rgba(0, 255, 150, 0.10);
+    border: 1px solid rgba(0, 255, 150, calc(0.10 + 0.70 * var(--hit)));
     border-radius: 5px;
+    box-shadow:
+        0 0 calc(9px * var(--hit)) rgba(0, 255, 150, calc(0.6 * var(--hit))),
+        inset 0 0 calc(12px * var(--hit)) rgba(0, 255, 150, calc(0.16 * var(--hit)));
+    transition: border-color 0.07s linear, box-shadow 0.07s linear;
     font-family: var(--font-mono);
     font-size: 0.7em;
     line-height: 1.25;
@@ -1652,6 +1661,10 @@ html#ht_spl body {
     color: #ffffff;
     font-weight: 700;
     text-align: center;
+    /* dim a sounding note as it decays / when the channel goes quiet, so an
+       idle channel reads as quieter than an actively-playing one. */
+    opacity: calc(0.4 + 0.6 * var(--lvl));
+    transition: opacity 0.08s linear;
 }
 #ht_brw #kd-tracker .kd-ch-inst {
     grid-area: inst;

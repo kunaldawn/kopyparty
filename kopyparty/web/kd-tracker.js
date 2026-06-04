@@ -40,10 +40,12 @@
     var prevRow = -1;
 
     // per-tile element refs + sustained per-channel note/instrument state
+    var tiles = null;           // NodeList of .kd-ch-tile
     var tileNote = null;        // NodeList of .kd-ch-note
     var tileInst = null;        // NodeList of .kd-ch-inst
     var vuFills = null;         // NodeList of .kd-vu-fill
     var vuLevels = null;        // smoothed displayed VU levels
+    var hitLevel = null;        // per-channel note-trigger flash (1 on strike, decays)
     var lastNote = null;        // Int16Array: last triggered note per channel (0 none, -1 silenced)
     var lastInst = null;        // Int16Array: last instrument per channel
 
@@ -209,7 +211,7 @@
         prevModPtr = 0;
         prevTid = null;
         stCached = false;
-        tileNote = tileInst = vuFills = vuLevels = lastNote = lastInst = null;
+        tiles = tileNote = tileInst = vuFills = vuLevels = hitLevel = lastNote = lastInst = null;
         fftSrc = null;
     }
 
@@ -229,10 +231,12 @@
                 '</div>';
         }
         gridEl.innerHTML = html;
+        tiles = gridEl.querySelectorAll('.kd-ch-tile');
         tileNote = gridEl.querySelectorAll('.kd-ch-note');
         tileInst = gridEl.querySelectorAll('.kd-ch-inst');
         vuFills = gridEl.querySelectorAll('.kd-vu-fill');
         vuLevels = new Float32Array(numChans);
+        hitLevel = new Float32Array(numChans);
         lastNote = new Int16Array(numChans);   // 0 = never played
         lastInst = new Int16Array(numChans);
     }
@@ -252,6 +256,10 @@
                     lastNote[ch] = note;
                     var inst = getCmd(mp, pat, row, ch, 1);
                     if (inst > 0) lastInst[ch] = inst;
+                    // trigger flash — fires on EVERY note-on, even a same-pitch
+                    // re-strike, so the grid visibly pulses in rhythm with the
+                    // pattern (the note text alone wouldn't change on re-hits).
+                    if (hitLevel) hitLevel[ch] = 1;
                 }
             }
             var nEl = tileNote[ch];
@@ -290,6 +298,17 @@
             cur = target > cur ? target : cur + (target - cur) * 0.35;
             vuLevels[ch] = cur;
             vuFills[ch].style.width = (cur * 100).toFixed(1) + '%';
+            // decay the note-trigger flash and push both intensities to the
+            // tile as CSS vars (--hit drives the strike glow, --lvl the
+            // note-text brightness so quiet/idle channels visibly dim).
+            if (hitLevel && tiles && tiles[ch]) {
+                var h = hitLevel[ch] * 0.80;
+                if (h < 0.01) h = 0;
+                hitLevel[ch] = h;
+                var st = tiles[ch].style;
+                st.setProperty('--hit', h.toFixed(3));
+                st.setProperty('--lvl', cur.toFixed(3));
+            }
         }
     }
 
