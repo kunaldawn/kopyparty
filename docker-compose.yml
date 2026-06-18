@@ -72,6 +72,16 @@ services:
       # visitors (one token bucket). Protects the home uplink. 0 disables.
       # 0.061 MB/s ≈ 62.5 KB/s ≈ 500 kbps (kilobits/sec).
       - --kd-dl-limit=${KOPYPARTY_DL_LIMIT:-0.061}
+      # KD fork: optional Google-auth gate. Set KOPYPARTY_AUTH_SECRET (shared
+      # HMAC secret with the kunaldawn.com login service) to ENABLE; leave empty
+      # to keep the archive public. Unauthenticated users are 302'd to
+      # KOPYPARTY_AUTH_LOGIN_URL with the original URL in the 'redirect' param.
+      - --kd-auth-secret=${KOPYPARTY_AUTH_SECRET:-}
+      - --kd-auth-login-url=${KOPYPARTY_AUTH_LOGIN_URL:-}
+      - --kd-auth-cookie=${KOPYPARTY_AUTH_COOKIE:-kd_session}
+      - --kd-auth-return-param=${KOPYPARTY_AUTH_RETURN_PARAM:-redirect}
+      - --kd-auth-iss=${KOPYPARTY_AUTH_ISS:-}
+      - --kd-auth-aud=${KOPYPARTY_AUTH_AUD:-}
       - -i
       - 0.0.0.0
       - -p

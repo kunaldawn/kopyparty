@@ -135,6 +135,18 @@ class HttpSrv(object):
 
         kdratelimit.start(self.args)
 
+        # KD fork: Google-auth verification gate (same per-serving-process init
+        # rule as above). Enabled only when --kd-auth-secret is set.
+        from . import kdauth
+
+        kdgate = kdauth.start(self.args)
+        if kdgate is not None and not kdgate.login_url:
+            self.log(
+                "kdauth",
+                "auth gate enabled but --kd-auth-login-url is empty; unauthenticated users will be redirected to a bare URL",
+                3,
+            )
+
         # redefine in case of multiprocessing
         socket.setdefaulttimeout(120)
 

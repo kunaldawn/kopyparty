@@ -34,6 +34,7 @@ from .__init__ import ANYWIN, RES, RESM, TYPE_CHECKING, EnvParams, unicode
 from .__version__ import S_VERSION
 from .authsrv import LEELOO_DALLAS, VFS  # typechk
 from . import kdratelimit
+from . import kdauth
 from .bos import bos
 from .star import StreamTar
 from .sutil import StreamArc, gfilter
@@ -864,6 +865,8 @@ class HttpCli(object):
         try:
             cors_k = self._cors()
             if self.mode in ("GET", "HEAD"):
+                if not self.kdauth_gate():
+                    return self.keepalive
                 return self.handle_get() and self.keepalive
             if self.mode == "OPTIONS":
                 return self.handle_options() and self.keepalive
@@ -1351,6 +1354,28 @@ class HttpCli(object):
             oh["Access-Control-Allow-Headers"] = acah
 
         return good_origin
+
+    def kdauth_gate(self):
+        # KD fork: Google-auth verification overlay. Returns True to let the
+        # request proceed (auth disabled, or a valid token); False after it has
+        # sent a 302 to the login URL.
+        inst = kdauth.INST
+        if inst is None:
+            return True  # disabled -> behave exactly as the public archive
+
+        tok = self.cookies.get(inst.cookie) or ""
+        if tok and inst.verify(tok, time.time()) is not None:
+            return True
+
+        proto = "https" if self.is_https else "http"
+        original = "%s://%s/%s" % (proto, self.host, self.req.lstrip("/"))
+        url = inst.build_login_redirect(original)
+        self.reply(
+            b"<html><body>redirecting to login\xe2\x80\xa6</body></html>",
+            status=302,
+            headers={"Location": url},
+        )
+        return False
 
     def handle_get(self) -> bool:
         if self.do_log:
