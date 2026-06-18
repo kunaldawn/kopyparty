@@ -5888,7 +5888,7 @@ var thegrid = (function () {
 
 			html.push('<a href="' + ohref + '" ref="' + ref +
 				'"' + ac + ' ttt="' + esc(name) + '"><img style="height:' +
-				(r.sz / 1.25) + 'em" loading="lazy" fetchpriority="low" decoding="async" onload="th_onload(this)" src="' +
+				(r.sz / 1.25) + 'em" fetchpriority="low" decoding="async" onload="th_onload(this)" data-src="' +
 				ihref + '" /><span' + ac + '>' + ao.innerHTML + '</span></a>');
 		}
 		ggrid.innerHTML = html.join('\n');
@@ -5906,6 +5906,36 @@ var thegrid = (function () {
 		for (var a = 0, aa = ths.length; a < aa; a++) {
 			ths[a].ondblclick = gclick2;
 			ths[a].onclick = gclick1;
+		}
+
+		// KD fork: only fetch thumbnails as they approach the viewport, so
+		// opening a folder with thousands of files doesn't fire thousands of
+		// ?th requests up front. Falls back to eager load if the browser
+		// lacks IntersectionObserver.
+		if (r.thumb_io)
+			r.thumb_io.disconnect();
+		var imgs = QSA('#ggrid>a>img');
+		if (window.IntersectionObserver) {
+			r.thumb_io = new IntersectionObserver(function (ents, ob) {
+				for (var i = 0; i < ents.length; i++) {
+					if (!ents[i].isIntersecting)
+						continue;
+					var im = ents[i].target;
+					if (im.dataset.src) {
+						im.src = im.dataset.src;
+						im.removeAttribute('data-src');
+					}
+					ob.unobserve(im);
+				}
+			}, { rootMargin: '200px' });
+			for (var a = 0, aa = imgs.length; a < aa; a++)
+				r.thumb_io.observe(imgs[a]);
+		} else {
+			for (var a = 0, aa = imgs.length; a < aa; a++)
+				if (imgs[a].dataset.src) {
+					imgs[a].src = imgs[a].dataset.src;
+					imgs[a].removeAttribute('data-src');
+				}
 		}
 
 		r.dirty = false;

@@ -69,7 +69,7 @@ to match the kunaldawn.com family of sites.
 GET  /                     → browser.html (grid)
 GET  /<path>/              → browser.html
 GET  /<path>/file          → tx_file
-GET  /<path>/?zip          → tx_zip (folder→zip, hidden by JS at root)
+GET  /<path>/?zip | ?tar   → 400 (disabled via --no-zip; only single files)
 GET  /?h                   → splash.html
 GET  /?hc                  → svcs.html (trimmed to "HTTP-only" notice)
 GET  /?ru                  → rups.html (always empty)
@@ -276,6 +276,61 @@ autoplay-blocked popup too); regular audio autoplays fine.
 **Play-from-start (⏮ / Home).** A recording helper: seeks the current track to 0
 and plays, so you can preselect a song, start the screen recorder, then trigger
 a clean start. Just `seek_au_sec(0)` + play.
+
+### Download bandwidth cap (`kd-ratelimit`)
+
+The fork is served from a home connection, so a single visitor could saturate
+the uplink. `kopyparty/kdratelimit.py` (fork-only) is a **single global token
+bucket per serving process**: every file-download thread draws from one shared
+pool, so the *aggregate* send rate across all visitors/connections converges to
+`--kd-dl-limit` MB/s.
+
+- **Hook point:** the throttle lives in `util.sendfile_py` (the Python
+  read/`sendall` loop), one `kdratelimit.throttle(len(buf))` per chunk. The
+  default kernel `os.sendfile` (`sendfile_kern`) **cannot** throttle, so
+  `httpcli.tx_file`'s `use_sendfile` is gated on `not kdratelimit.INST` — a
+  configured cap forces the (throttleable) Python path. Losing kernel zero-copy
+  is irrelevant: we're deliberately slowing transfers and the box is disk-bound.
+- **Init point is `HttpSrv.__init__`** (right after `kdcache.start`), NOT
+  `svchub` — same `-j>1` BrokerMp trap as the dir-cache: request/send threads
+  run in the serving process(es), and a parent-process global is `None` in
+  workers. The fork keeps `-j1`, so there's exactly one bucket; **under `-j>1`
+  the cap becomes per-worker** (N workers ⇒ up to N×limit).
+- **Bucket semantics:** debt may go negative (so a chunk larger than the burst
+  still drains), and the sleep happens *outside* the lock (threads serialize on
+  bandwidth, not on the lock). A full bucket allows brief short-term overshoot
+  up to `capacity` (≈1 s of rate) on connection bursts; it self-corrects to the
+  cap in steady state. `--kd-dl-limit 0` disables (no limiter, kernel sendfile
+  resumes).
+- **Knob:** `KOPYPARTY_DL_LIMIT` (default `5`) → `--kd-dl-limit` MB/s in
+  `docker-compose.yml`. Pure-logic bucket is unit-tested in
+  `tests/test_kdratelimit.py` (deterministic injected clock/sleep).
+
+### No bulk download (`--no-zip`)
+
+Read-only archive served from home — **only single files download, no
+folder/multi-file ZIP/TAR**. Achieved with copyparty's own `--no-zip`
+(in `docker-compose.yml`), which does two things: `tx_zip` calls `_can_zip`
+first, so `?zip`/`?tar` on any folder returns **400** ("disabled in server
+config"); and `authsrv.py` sets `have_zip = not no_zip`, so the `selzip` /
+`zip1` / `arcfmt` controls in `browser.js` auto-hide. The fork's **own**
+hardcoded `#kd-zip` ("📦 ZIP") button injection was removed from `browser.html`
+(its `.kd-zip-btn` CSS in `kd-theme.css` went too). That same inline script
+still repositions `#wfp` (PREV/UP/NEXT) — **keep that half**. Don't re-add a
+folder-zip affordance.
+
+### Lazy grid thumbnails
+
+`loadgrid()` in `browser.js` builds the whole grid in one `innerHTML` write; with
+thousands of files, native `loading="lazy"` didn't reliably gate the up-front
+request burst and the page hung. The grid `<img>` now emits **`data-src`** (no
+request at render) and an **IntersectionObserver** (`rootMargin: '200px'`,
+stashed on `r.thumb_io` and disconnected/recreated on each rebuild) assigns
+`src` only as items approach the viewport, then unobserves. There's an eager
+fallback when `IntersectionObserver` is absent. **Don't revert the grid img to
+eager `src`** or re-add `loading="lazy"` there. (Thumbs are pregenerated on SSD
+via `--th-pregen`, so the win is cutting the request/DOM burst, not transcode
+cost.)
 
 ### Cache headers (Cloudflare)
 

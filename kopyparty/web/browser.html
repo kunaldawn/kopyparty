@@ -204,27 +204,11 @@
 		})();
 
 		(function () {
-			var vp = location.pathname.replace(/\/+$/, '');
 			var tries = 0;
-			var done_zip = false, done_wfp = false;
+			var done_wfp = false;
 			var inject = function () {
 				var gh = document.getElementById('ghead');
 				if (!gh) return false;
-				if (!done_zip && vp) {
-					if (!document.getElementById('kd-zip')) {
-						var a = document.createElement('a');
-						a.id = 'kd-zip';
-						a.href = '?zip';
-						a.className = 'btn kd-zip-btn';
-						a.rel = 'nofollow';
-						a.textContent = '📦 ZIP';
-						a.title = 'download this folder as zip';
-						gh.appendChild(a);
-					}
-					done_zip = true;
-				} else if (!vp) {
-					done_zip = true;  // skip on root
-				}
 				if (!done_wfp) {
 					var wfp = document.getElementById('wfp');
 					if (wfp && gh.parentNode) {
@@ -232,7 +216,7 @@
 						done_wfp = true;
 					}
 				}
-				return done_zip && done_wfp;
+				return done_wfp;
 			};
 			if (inject()) return;
 			var timer = setInterval(function () {

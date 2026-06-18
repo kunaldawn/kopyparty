@@ -129,6 +129,12 @@ class HttpSrv(object):
 
         kdcache.start(self.args, self.log, self.asrv)
 
+        # KD fork: global download bandwidth cap. Same per-serving-process init
+        # rule as kdcache above (the request/send threads live in THIS process).
+        from . import kdratelimit
+
+        kdratelimit.start(self.args)
+
         # redefine in case of multiprocessing
         socket.setdefaulttimeout(120)
 

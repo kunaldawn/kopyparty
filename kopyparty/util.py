@@ -3322,6 +3322,8 @@ def sendfile_py(
     dls: dict[str, tuple[float, int]],
     dl_id: str,
 ) -> int:
+    from . import kdratelimit
+
     sent = 0
     remains = upper - lower
     f.seek(lower)
@@ -3332,6 +3334,8 @@ def sendfile_py(
         buf = f.read(min(bufsz, remains))
         if not buf:
             return remains
+
+        kdratelimit.throttle(len(buf))  # KD fork: global download bandwidth cap
 
         try:
             s.sendall(buf)
