@@ -47,13 +47,15 @@ class AuthGate(object):
     def verify(self, token, now):
         """Return the claims dict for a valid HS256 token, else None. Never raises."""
         try:
+            if not token or len(token) > 8192:
+                return None
             parts = token.split(".")
             if len(parts) != 3:
                 return None
             h_b64, p_b64, sig_b64 = parts
 
             header = json.loads(_b64url_decode(h_b64))
-            if header.get("alg") != "HS256":
+            if not isinstance(header, dict) or header.get("alg") != "HS256":
                 return None  # block alg:none and RS256 confusion
 
             signing_input = (h_b64 + "." + p_b64).encode("utf-8")
@@ -66,8 +68,8 @@ class AuthGate(object):
                 return None
 
             exp = claims.get("exp")
-            if not isinstance(exp, (int, float)):
-                return None  # exp is mandatory
+            if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+                return None  # exp is mandatory (numeric, not bool)
             if now > exp + self.leeway:
                 return None
 

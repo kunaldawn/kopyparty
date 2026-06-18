@@ -82,6 +82,12 @@ def test_missing_exp_is_rejected():
     assert g.verify(mint({"email": "a@b.com"}), now=1000) is None
 
 
+def test_exp_as_bool_is_rejected():
+    g = gate()
+    assert g.verify(mint({"exp": True}), now=1000) is None
+    assert g.verify(mint({"exp": False}), now=1000) is None
+
+
 def test_tampered_payload_is_rejected():
     g = gate()
     tok = mint({"exp": 2000, "email": "a@b.com"})
