@@ -73,23 +73,27 @@ parent-process global is `None`.
 
 ## Feature 2 — Remove all bulk download
 
-### Server
+**Refined during planning:** copyparty already has a first-class
+`--no-zip` switch. It is the right lever and avoids editing `httpcli.py`:
 
-- `httpcli.py` ~4194: the `for k in ["zip", "tar"]` routing block returns
-  **404** instead of calling `tx_zip` (consistent with how other removed routes
-  404 in this fork).
-- `tx_zip`'s body is reduced to a guard that raises `Pebkac(404)`, so archive
-  generation is unreachable even if some other caller remains.
+- **Server:** `tx_zip()` already calls `_can_zip()` at its top
+  (`httpcli.py:2645`), which returns a "disabled in server config" message when
+  `args.no_zip` is set, making `tx_zip` raise `Pebkac(400)`. So `?zip` / `?tar`
+  on any folder returns **400** (blocked) with no code change. The directory
+  listing's own zip-link logic (`_can_zip` at `httpcli.py:4258/4292`) also
+  goes dark.
+- **Client UI:** `authsrv.py:3242` sets `"have_zip": not self.args.no_zip`, so
+  with `--no-zip` the `selzip` / `zip1` / `arcfmt` controls in `browser.js`
+  auto-hide (they already gate on `have_zip`). No JS edit needed.
+- **Wiring:** add `--no-zip` to the `docker-compose.yml` command list.
+- **Fork-specific leftover:** `browser.html` injects a hardcoded `#kd-zip`
+  ("📦 ZIP") button pointing at `?zip` regardless of `have_zip`. Remove that
+  injection. The same inline script also repositions `#wfp` (PREV/UP/NEXT) —
+  **that behavior is kept**; only the ZIP-button creation is removed.
+- `browser2.html` (no-JS fallback) has no zip/tar link — confirmed, nothing to
+  do there.
 
-### Client
-
-- `browser.html`: remove the `#kd-zip` ZIP-button injection. The same inline
-  script also repositions `#wfp` (PREV/UP/NEXT) — **that behavior is kept**;
-  only the ZIP-button creation is removed.
-- `browser.js`: force the `selzip` multi-select button hidden (it already POSTs,
-  which 405s, but the UI affordance is removed).
-- Grep `browser2.html` (no-JS fallback) and any folder-listing template for
-  residual per-folder zip/tar links and remove them.
+Net result: only individual files download; every bulk path (URL + UI) is off.
 
 ---
 
@@ -128,7 +132,7 @@ Only thumbnails the user scrolls near are ever requested, so opening a
 - Playwright audit invariants from CLAUDE.md (J_U2K === 2, no console errors,
   grid renders, no overlaps).
 - Smoke tests:
-  - `GET /<folder>/?zip` and `?tar` → **404**.
+  - `GET /<folder>/?zip` and `?tar` → **400** ("disabled in server config").
   - `GET /<folder>/file` (single file) → **200** and still streams.
   - Network tab: only near-viewport `?th=` requests fire when a large folder is
     opened; scrolling triggers more.
