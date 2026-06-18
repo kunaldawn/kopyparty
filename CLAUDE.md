@@ -367,7 +367,10 @@ checks that cookie on every request.
 - **Token contract (kunaldawn.com side):** HS256 JWT, cookie name
   `KOPYPARTY_AUTH_COOKIE` (default `kd_session`) with
   `Domain=.kunaldawn.com; Secure; HttpOnly`, claims `exp` (required) + `email`
-  (logged), optional `iss`/`aud`.
+  (logged), optional `iss`/`aud`. **The login service must validate the
+  `redirect` param against an allowlist** (e.g. only `*.kunaldawn.com`) before
+  bouncing the user back — this server reflects the client-supplied `Host` into
+  that param, so an unchecked issuer would be an open redirect on *its* side.
 - **Knobs (env → compose → CLI):** `KOPYPARTY_AUTH_SECRET` (**the on/off
   switch** — empty = disabled), `KOPYPARTY_AUTH_LOGIN_URL`,
   `KOPYPARTY_AUTH_COOKIE` (default `kd_session`), `KOPYPARTY_AUTH_RETURN_PARAM`
