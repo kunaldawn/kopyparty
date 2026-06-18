@@ -86,6 +86,9 @@ POST/PUT/DELETE/PROPFIND/PROPPATCH/LOCK/UNLOCK/MKCOL/MOVE/COPY  → 405
 
 GET  /?qr | /?shares | /?idp | /?stack | /?reload=cfg | /?scan
 GET  /.kpr/metrics | /.kpr/ssdp                                  → 404
+
+# when the auth gate is enabled (KOPYPARTY_AUTH_SECRET set):
+GET  <any path> without a valid kd_session cookie  → 302 to the login URL
 ```
 
 ### Themed pages
@@ -331,6 +334,44 @@ fallback when `IntersectionObserver` is absent. **Don't revert the grid img to
 eager `src`** or re-add `loading="lazy"` there. (Thumbs are pregenerated on SSD
 via `--th-pregen`, so the win is cutting the request/DOM burst, not transcode
 cost.)
+
+### Auth gate (`kd-auth`)
+
+Optional, env-toggled authentication. The Google OAuth flow itself lives on
+**kunaldawn.com** (a separate codebase, not this repo); it signs an HS256 JWT
+with a shared secret and sets it as a cookie on `.kunaldawn.com`. This server is
+**verify-only**: `kopyparty/kdauth.py` (fork-only, mirrors `kdratelimit.py`)
+checks that cookie on every request.
+
+- **Gate, not a perm change.** copyparty's permission model is untouched — the
+  volume stays anonymous-readable (`*:r`). A single chokepoint,
+  `HttpCli.kdauth_gate()`, is called in the **GET/HEAD dispatch** in
+  `httpcli.py` (right before `handle_get`, which is the sole funnel for every
+  content path: files, listings, thumbnails, `?doc`/`?v`, RSS, static
+  `/.kpr/*`). `self.uname` is deliberately left `*` — setting it to the token
+  email would make `uaxs[email]` all-false and 403 the read.
+- **Behavior:** disabled (no secret) → exact public-archive behavior as before.
+  Enabled + missing/invalid/expired token → **302** to
+  `KOPYPARTY_AUTH_LOGIN_URL?<return_param>=<url-encoded original URL>` (the
+  original is carried back so the user returns where they were; the `#fragment`
+  can't survive — browsers don't send it). Enabled + valid token → serves
+  normally.
+- **Verifier hardening (don't weaken):** `alg` strictly pinned to `HS256`
+  (blocks `alg:none` / RS256 confusion), header must be a dict, `exp` mandatory
+  and numeric (bool rejected), `nbf`/`iat`/leeway honoured, `hmac.compare_digest`
+  for the signature, token length capped, optional `iss`/`aud` enforced only if
+  configured. `verify()` never raises (fails closed → `None`). Pure stdlib, no
+  new image deps. Unit-tested in `tests/test_kdauth.py`.
+- **Init point:** `HttpSrv.__init__` (like `kdcache`/`kdratelimit`). The verifier
+  is stateless, so `-j>1` is fine (each worker holds an identical copy).
+- **Token contract (kunaldawn.com side):** HS256 JWT, cookie name
+  `KOPYPARTY_AUTH_COOKIE` (default `kd_session`) with
+  `Domain=.kunaldawn.com; Secure; HttpOnly`, claims `exp` (required) + `email`
+  (logged), optional `iss`/`aud`.
+- **Knobs (env → compose → CLI):** `KOPYPARTY_AUTH_SECRET` (**the on/off
+  switch** — empty = disabled), `KOPYPARTY_AUTH_LOGIN_URL`,
+  `KOPYPARTY_AUTH_COOKIE` (default `kd_session`), `KOPYPARTY_AUTH_RETURN_PARAM`
+  (default `redirect`), `KOPYPARTY_AUTH_ISS`, `KOPYPARTY_AUTH_AUD`.
 
 ### Cache headers (Cloudflare)
 
