@@ -40,7 +40,10 @@ class RateLimiter(object):
     def consume(self, nbytes):
         # Deduct nbytes (debt allowed to go negative so a chunk larger than the
         # burst still drains), then sleep off any debt OUTSIDE the lock so
-        # threads serialize on bandwidth, not on the lock.
+        # threads serialize on bandwidth, not on the lock. A full bucket lets
+        # many connections starting at once burst up to `capacity` bytes before
+        # any throttling kicks in, so the aggregate can briefly exceed the cap;
+        # it self-corrects to the cap in steady state (refill is wall-time based).
         n = float(nbytes)
         with self.lock:
             now = self._clock()
