@@ -33,6 +33,7 @@ except:
 from .__init__ import ANYWIN, RES, RESM, TYPE_CHECKING, EnvParams, unicode
 from .__version__ import S_VERSION
 from .authsrv import LEELOO_DALLAS, VFS  # typechk
+from . import kdratelimit
 from .bos import bos
 from .star import StreamTar
 from .sutil import StreamArc, gfilter
@@ -2249,6 +2250,7 @@ class HttpCli(object):
                 # fmt: off
                 not self.tls
                 and not self.args.no_sendfile
+                and not kdratelimit.INST  # KD fork: throttle needs the py loop
                 and (BITNESS > 32 or file_sz < 0x7fffFFFF)
                 # fmt: on
             )
