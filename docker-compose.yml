@@ -70,7 +70,8 @@ services:
       - --kd-dircache-secs=${KOPYPARTY_DIRCACHE_SECS:-86400}
       # KD fork: global download bandwidth cap in MB/s, shared across ALL
       # visitors (one token bucket). Protects the home uplink. 0 disables.
-      - --kd-dl-limit=${KOPYPARTY_DL_LIMIT:-5}
+      # 0.061 MB/s ≈ 62.5 KB/s ≈ 500 kbps (kilobits/sec).
+      - --kd-dl-limit=${KOPYPARTY_DL_LIMIT:-0.061}
       - -i
       - 0.0.0.0
       - -p
