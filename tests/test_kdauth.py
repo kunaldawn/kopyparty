@@ -128,6 +128,28 @@ def test_build_login_redirect_existing_query_uses_amp():
     assert url == "https://kunaldawn.com/login?x=1&redirect=https%3A%2F%2Fxyz.kunaldawn.com%2Fa", url
 
 
+def test_read_token_returns_full_jwt_untruncated():
+    # the real bug this guards: a JWT (with dots) must come back intact, not
+    # clipped the way copyparty's own cookie parser would clip it.
+    g = gate()
+    tok = mint({"exp": 2000})
+    assert g.read_token("kd_session=" + tok) == tok
+
+
+def test_read_token_picks_the_right_cookie_among_many():
+    g = gate()
+    tok = mint({"exp": 2000})
+    header = "dots=y; kd_session=" + tok + "; cppwd=hunter2"
+    assert g.read_token(header) == tok
+
+
+def test_read_token_missing_or_empty_is_blank():
+    g = gate()
+    assert g.read_token("") == ""
+    assert g.read_token("other=1; foo=bar") == ""
+    assert g.read_token(None) == ""
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

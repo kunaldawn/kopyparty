@@ -94,6 +94,23 @@ class AuthGate(object):
         except Exception:
             return None
 
+    def read_token(self, cookie_header):
+        """Pull the auth cookie's value out of the raw Cookie header.
+
+        copyparty's own cookie parser (util.unescape_cookie) truncates any
+        non-"cppw*" cookie to 3 chars, which would mangle our JWT; so the gate
+        reads the raw header through here instead of HttpCli.cookies.
+        """
+        if not cookie_header:
+            return ""
+        for part in cookie_header.split(";"):
+            if "=" not in part:
+                continue
+            k, v = part.split("=", 1)
+            if k.strip() == self.cookie:
+                return v.strip()
+        return ""
+
     def build_login_redirect(self, original_url):
         """login_url with the original URL appended as the configured return param."""
         enc = quote(original_url, safe="")

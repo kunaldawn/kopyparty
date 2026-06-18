@@ -1363,7 +1363,9 @@ class HttpCli(object):
         if inst is None:
             return True  # disabled -> behave exactly as the public archive
 
-        tok = self.cookies.get(inst.cookie) or ""
+        # read the raw Cookie header, not self.cookies: copyparty's cookie
+        # parser truncates non-"cppw*" cookie values to 3 chars (mangling JWTs).
+        tok = inst.read_token(self.headers.get("cookie") or "")
         if tok and inst.verify(tok, time.time()) is not None:
             return True
 
