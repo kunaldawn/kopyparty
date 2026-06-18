@@ -54,10 +54,10 @@ verifier.
 
 **Config object** (built in `start(args)`):
 - `secret: bytes` — HMAC key (from `--kd-auth-secret`).
-- `cookie: str` — cookie name to read (default `kd_auth`).
+- `cookie: str` — cookie name to read (default `kd_session`).
 - `login_url: str` — where to send unauthenticated users.
 - `return_param: str` — query-param name carrying the original URL (default
-  `return`).
+  `redirect`).
 - `iss: str` / `aud: str` — optional expected claims ("" = don't check).
 - `leeway: int` — clock-skew seconds for `exp`/`nbf`/`iat` (default 60).
 
@@ -129,16 +129,16 @@ change.
 `__main__.py` (beside the other `--kd-*` args):
 - `--kd-auth-secret` (str, default ``)
 - `--kd-auth-login-url` (str, default ``)
-- `--kd-auth-cookie` (str, default `kd_auth`)
-- `--kd-auth-return-param` (str, default `return`)
+- `--kd-auth-cookie` (str, default `kd_session`)
+- `--kd-auth-return-param` (str, default `redirect`)
 - `--kd-auth-iss` (str, default ``)
 - `--kd-auth-aud` (str, default ``)
 
 `docker-compose.yml` command list:
 - `--kd-auth-secret=${KOPYPARTY_AUTH_SECRET:-}`
 - `--kd-auth-login-url=${KOPYPARTY_AUTH_LOGIN_URL:-}`
-- `--kd-auth-cookie=${KOPYPARTY_AUTH_COOKIE:-kd_auth}`
-- `--kd-auth-return-param=${KOPYPARTY_AUTH_RETURN_PARAM:-return}`
+- `--kd-auth-cookie=${KOPYPARTY_AUTH_COOKIE:-kd_session}`
+- `--kd-auth-return-param=${KOPYPARTY_AUTH_RETURN_PARAM:-redirect}`
 - `--kd-auth-iss=${KOPYPARTY_AUTH_ISS:-}`
 - `--kd-auth-aud=${KOPYPARTY_AUTH_AUD:-}`
 
@@ -149,7 +149,7 @@ verifier — fine, it's stateless).
 ## Token contract (for the kunaldawn.com issuer)
 
 - JWT, alg **HS256**, signed with the shared `KOPYPARTY_AUTH_SECRET`.
-- Cookie: name = `KOPYPARTY_AUTH_COOKIE` (default `kd_auth`),
+- Cookie: name = `KOPYPARTY_AUTH_COOKIE` (default `kd_session`),
   `Domain=.kunaldawn.com; Path=/; Secure; HttpOnly; SameSite=Lax`.
 - Claims: `exp` (required, unix seconds); `email` (recommended, logged);
   optional `iss`/`aud` matching this server's config.
