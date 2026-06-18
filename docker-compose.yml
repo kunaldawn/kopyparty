@@ -32,6 +32,10 @@ services:
     command:
       - --no-crt
       - --grid
+      # KD fork: read-only archive — no folder/multi-file ZIP/TAR downloads.
+      # Blocks the ?zip/?tar route (tx_zip raises) AND hides the client UI
+      # (have_zip := not no_zip). Only single files download.
+      - --no-zip
       - --kd-header=${KOPYPARTY_HEADER:-KD's Homebrew Data Archive}
       - --kd-footer=${KOPYPARTY_FOOTER:-Served offline via KD's Homebrew Data Archive}
       # ----- thumbnails: pregen at startup, never expire, never on-demand -----
@@ -64,6 +68,9 @@ services:
       # so the first browse after boot is already served from RAM. A container
       # restart also forces an immediate re-warm.
       - --kd-dircache-secs=${KOPYPARTY_DIRCACHE_SECS:-86400}
+      # KD fork: global download bandwidth cap in MB/s, shared across ALL
+      # visitors (one token bucket). Protects the home uplink. 0 disables.
+      - --kd-dl-limit=${KOPYPARTY_DL_LIMIT:-5}
       - -i
       - 0.0.0.0
       - -p

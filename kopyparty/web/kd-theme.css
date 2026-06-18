@@ -2566,27 +2566,6 @@ html#ht_rup #tw th {
     min-width: 0;
 }
 
-#ht_brw .ghead a.kd-zip-btn {
-    float: none;
-    position: static !important;
-    top: auto !important;
-    right: auto !important;
-    margin-left: auto !important;
-    color: #071013;
-    background: var(--a);
-    border-color: var(--a);
-    box-shadow: 0 0 10px rgba(0, 255, 150, 0.35);
-    font-weight: 700;
-    z-index: 1;
-}
-
-#ht_brw .ghead a.kd-zip-btn:hover {
-    color: #071013;
-    background: var(--a-hil);
-    border-color: var(--a-hil);
-    box-shadow: 0 0 14px rgba(0, 255, 150, 0.55);
-}
-
 /* ======================================================================
    generic .btn contrast bump (used in many kopyparty chrome elements)
    ====================================================================== */
