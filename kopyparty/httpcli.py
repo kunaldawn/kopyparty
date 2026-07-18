@@ -1369,7 +1369,13 @@ class HttpCli(object):
         if tok and inst.verify(tok, time.time()) is not None:
             return True
 
-        proto = "https" if self.is_https else "http"
+        # behind a reverse-proxy (Cloudflare) the socket is plain HTTP, so
+        # self.is_https is False unless copyparty's --rproxy/--xf-proto machinery
+        # ran. Trust X-Forwarded-Proto directly so the return URL keeps the
+        # scheme the browser actually used (else the login issuer's https-only
+        # redirect allowlist rejects the http:// bounce-back).
+        xfp = (self.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+        proto = xfp if xfp in ("http", "https") else ("https" if self.is_https else "http")
         original = "%s://%s/%s" % (proto, self.host, self.req.lstrip("/"))
         url = inst.build_login_redirect(original)
         self.reply(

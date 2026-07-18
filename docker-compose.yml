@@ -82,6 +82,21 @@ services:
       - --kd-auth-return-param=${KOPYPARTY_AUTH_RETURN_PARAM:-redirect}
       - --kd-auth-iss=${KOPYPARTY_AUTH_ISS:-}
       - --kd-auth-aud=${KOPYPARTY_AUTH_AUD:-}
+      # ----- reverse-proxy awareness (Cloudflare) -----
+      # Behind Cloudflare the proxy->container hop is plain HTTP, so without this
+      # copyparty logs the proxy IP as the client and treats every request as
+      # http:// (breaking the auth-gate return URL scheme). These defaults are
+      # INERT on local/direct access: the XFF block only fires when the
+      # --xff-hdr header is actually present, and cf-connecting-ip is never sent
+      # by a direct browser. In prod, keep --xff-hdr=cf-connecting-ip.
+      #   --xff-src: trusted proxy CIDRs. 'lan' = private ranges (CF Tunnel /
+      #   local reverse-proxy). Use 'any' ONLY if the container is reached
+      #   directly by Cloudflare edge IPs AND you fully trust cf-connecting-ip.
+      - --rproxy=${KOPYPARTY_RPROXY:-1}
+      - --xff-hdr=${KOPYPARTY_XFF_HDR:-cf-connecting-ip}
+      - --xff-src=${KOPYPARTY_XFF_SRC:-lan}
+      - --xf-proto=${KOPYPARTY_XF_PROTO:-x-forwarded-proto}
+      - --xf-proto-fb=${KOPYPARTY_XF_PROTO_FB:-https}
       - -i
       - 0.0.0.0
       - -p
